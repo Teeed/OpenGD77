@@ -978,6 +978,11 @@ void menuUtilityRenderHeader(void)
 				}
 				else
 				{
+					if (nonVolatileSettings.dmrFilterLevel >= DMR_FILTER_TS_TG)
+					{
+						strcat(buffer, "G");
+					}
+
 					ucPrintCore(22, Y_OFFSET, buffer, FONT_6x8, TEXT_ALIGN_LEFT, false);
 //					if (nonVolatileSettings.tsManualOverride != 0)
 //					{
