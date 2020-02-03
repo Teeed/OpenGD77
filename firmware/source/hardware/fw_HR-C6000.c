@@ -340,9 +340,10 @@ static inline bool checkTimeSlotFilter(void)
 
 bool checkTalkGroupFilter(void)
 {
-	if (nonVolatileSettings.dmrFilterLevel >= DMR_FILTER_TS_TG)
+	if ( (!(trxTalkGroupOrPcId & (PC_CALL_FLAG << 24))) && // for PC return true
+		nonVolatileSettings.dmrFilterLevel >= DMR_FILTER_TS_TG) // if TG then check
 	{
-		return (trxTalkGroupOrPcId & 0x00FFFFFF) == receivedTgOrPcId;
+		return (trxTalkGroupOrPcId & 0x00FFFFFF) == receivedTgOrPcId; // if it matches
 	}
 	
 	return true;
