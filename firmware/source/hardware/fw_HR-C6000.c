@@ -342,12 +342,10 @@ bool checkTalkGroupFilter(void)
 {
 	if (nonVolatileSettings.dmrFilterLevel >= DMR_FILTER_TS_TG)
 	{
-		return true;// To Do. Actually filter on TG
+		return (trxTalkGroupOrPcId & 0x00FFFFFF) == receivedTgOrPcId;
 	}
-	else
-	{
-		return true;
-	}
+	
+	return true;
 }
 
 void transmitTalkerAlias(void)
@@ -689,7 +687,7 @@ inline static void HRC6000SysReceivedDataInt(void)
 					(skip_count == 0 ||  (receivedSrcId != trxDMRID && receivedSrcId!=0x00)) &&
 					(rxSyncClass!=SYNC_CLASS_DATA) && ( sequenceNumber>= 0x01) && (sequenceNumber <= 0x06) &&
 					(((trxDMRMode == DMR_MODE_PASSIVE) && (checkTimeSlotFilter() && lastTimeCode != timeCode) &&
-					 (rxColorCode == trxGetDMRColourCode())) || (trxDMRMode == DMR_MODE_ACTIVE &&
+					 (rxColorCode == trxGetDMRColourCode()) && checkTalkGroupFilter()) || (trxDMRMode == DMR_MODE_ACTIVE &&
 					 (slot_state == DMR_STATE_RX_1))))
 			{
 				//SEGGER_RTT_printf(0, "Audio frame %d\t%d\n",sequenceNumber,timeCode);
