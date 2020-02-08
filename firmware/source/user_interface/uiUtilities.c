@@ -1248,28 +1248,33 @@ void printToneAndSquelch(void)
 	char buf[24];
 	if (trxGetMode() == RADIO_MODE_ANALOG)
 	{
+		int offset = 0;
 		if (currentChannelData->rxTone == TRX_CTCSS_TONE_NONE)
 		{
-			snprintf(buf, 24, "CTCSS:%s|", currentLanguage->none);
-			buf[23] = 0;
+			offset = snprintf(buf, sizeof(buf), "CTCSS:%s|", currentLanguage->none);
 		}
 		else
 		{
-			snprintf(buf, 24, "CTCSS:%d.%dHz|", currentChannelData->rxTone / 10 , currentChannelData->rxTone % 10);
+			offset = snprintf(buf, sizeof(buf), "CTCSS:%d.%dHz|", currentChannelData->rxTone / 10 , currentChannelData->rxTone % 10);
+		}
+
+		if (offset < 0)
+		{
+			ucPrintCentered(16, "ferr pATAS()", FONT_6x8);
+			return;
 		}
 
 		if (currentChannelData->txTone == TRX_CTCSS_TONE_NONE)
 		{
-			snprintf(buf, 24, "%s%s", buf, currentLanguage->none);
-			buf[23] = 0;
+			snprintf(buf+offset, sizeof(buf)-offset, "%s", currentLanguage->none);
 		}
 		else
 		{
-			snprintf(buf, 24, "%s%d.%dHz", buf, currentChannelData->txTone / 10 , currentChannelData->txTone % 10);
+			snprintf(buf+offset, sizeof(buf)-offset, "%d.%dHz", currentChannelData->txTone / 10 , currentChannelData->txTone % 10);
 		}
 		ucPrintCentered(16, buf, FONT_6x8);
 
-		snprintf(buf, 24, "SQL:%d%%", 5*(((currentChannelData->sql == 0) ? nonVolatileSettings.squelchDefaults[trxCurrentBand[TRX_RX_FREQ_BAND]] : currentChannelData->sql)-1));
+		snprintf(buf, sizeof(buf), "SQL:%d%%", 5*(((currentChannelData->sql == 0) ? nonVolatileSettings.squelchDefaults[trxCurrentBand[TRX_RX_FREQ_BAND]] : currentChannelData->sql)-1));
 		ucPrintCentered(24 + 1, buf, FONT_6x8);
 	}
 }
