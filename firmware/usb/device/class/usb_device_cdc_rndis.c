@@ -527,7 +527,7 @@ usb_status_t USB_DeviceCdcRndisQueryCommand(usb_device_cdc_rndis_struct_t *handl
 
 {
     rndis_query_msg_struct_t *rndisQueryMsg;
-    rndis_query_cmplt_struct_t *rndisQueryCmplt;
+    static rndis_query_cmplt_struct_t *rndisQueryCmplt;
     uint32_t infoBufLen = 0;
     uint8_t *infoBuf = NULL;
     usb_device_cdc_rndis_request_param_struct_t reqParam;
@@ -810,7 +810,7 @@ usb_status_t USB_DeviceCdcRndisSetCommand(usb_device_cdc_rndis_struct_t *handle,
 
 {
     rndis_set_msg_struct_t *rndisSetMsg;
-    rndis_set_cmplt_struct_t *rndisSetCmplt;
+    static rndis_set_cmplt_struct_t *rndisSetCmplt;
     usb_device_cdc_rndis_request_param_struct_t reqParam;
     if (!handle)
     {
@@ -909,7 +909,7 @@ usb_status_t USB_DeviceCdcRndisSetCommand(usb_device_cdc_rndis_struct_t *handle,
 usb_status_t USB_DeviceCdcRndisResetCommand(usb_device_cdc_rndis_struct_t *handle, uint8_t **message, uint32_t *len)
 
 {
-    rndis_reset_cmplt_struct_t *rndisResetCmplt;
+    static rndis_reset_cmplt_struct_t *rndisResetCmplt;
     if (!handle)
     {
         return kStatus_USB_InvalidHandle;
