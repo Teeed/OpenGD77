@@ -830,10 +830,10 @@ void codeplugInitChannelsPerZone(void)
 	// this value can never me 0xff if its a channel number
 
 	// Note. I tried to read just 1 byte but it crashed. So I am now reading 16 bytes and checking the last one
-	EEPROM_Read(0x8060,(uint8_t *)buf,16);
-	if (buf[15] >= 0x00 && buf[15]<=0x04)
+	EEPROM_Read(0x8060, (uint8_t *)buf, 16);
+	if (buf[15] <= 0x04)
 	{
-		codeplugChannelsPerZone=80;// Must be the new 80 channel per zone format
+		codeplugChannelsPerZone = 80;// Must be the new 80 channel per zone format
 	}
 }
 
