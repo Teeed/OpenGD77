@@ -3,6 +3,9 @@ Open source firmware for the Radioddity GD-77 dual band DMR / FM handheld transc
 
 Note. The AMBE codec used by DMR is not open source. This firmware uses binary sections from the official firmware for the AMBE encoding and decoding functions. However all other parts of the code are open source
 
+# Releases
+For binary relases please look at https://github.com/Teeed/OpenGD77/releases
+
 # Project status
 
 The firmware is relatively stable and provides DMR and FM audio transmission and reception, as well as a DMR hotspot mode.
