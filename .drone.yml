@@ -1,0 +1,26 @@
+---
+kind: pipeline
+type: docker
+name: compile
+
+steps:
+- name: compile
+  image: mcuxpressoide_opengd77
+  pull: never
+  commands:
+  - ./ci/build.sh
+- name: publish
+  image: plugins/github-release
+  settings:
+    api_key:
+      from_secret: github_token
+    files: firmware/Debug/firmware.sgl
+    checksum:
+      - sha256
+  when:
+    event: tag
+---
+kind: signature
+hmac: eacafd832758718021903ac6833013cd8fcbbbdd01ed3a4d39049fe56e7ea004
+
+...

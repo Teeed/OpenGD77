@@ -1,8 +1,6 @@
 FROM ubuntu:18.04
-LABEL Description="Image for buiding arm project with mcuxpresso"
+LABEL Description="Image for buiding OpenGD77 project"
 WORKDIR /work
-
-# TODO: Optimize this!
 
 ENV SDK_VERSION 2.7.0
 ENV SDK_TYPE MK22FN512xxx12
@@ -22,11 +20,8 @@ RUN apt update && \
       libswt-gtk-3-jni \
       libswt-gtk-3-java \
       libwebkit2gtk-4.0-37 \
-      wget && \
+      wget xvfb git && \
     apt clean
-
-RUN apt install -y xvfb
-RUN apt install -y git
 
 # install mcuxpresso
 RUN chmod a+x mcuxpressoide-${IDE_VERSION}.x86_64.deb.bin &&\
@@ -44,14 +39,15 @@ RUN chmod a+x mcuxpressoide-${IDE_VERSION}.x86_64.deb.bin &&\
   # manually run the postinstall script
   mkdir -p /usr/share/NXPLPCXpresso &&\
   chmod a+w /usr/share/NXPLPCXpresso &&\
-  ln -s /usr/local/mcuxpressoide-${IDE_VERSION} /usr/local/mcuxpressoide
+  ln -s /usr/local/mcuxpressoide-${IDE_VERSION} /usr/local/mcuxpressoide &&\
+  mkdir -p /root/mcuxpresso/02/SDKPackages &&\
+  cd .. &&\
+  mv SDK_${SDK_VERSION}_${SDK_TYPE}.zip /root/mcuxpresso/02/SDKPackages &&\
+  rm mcuxpressoide-${IDE_VERSION}.x86_64.deb.bin &&\
+  rm -rf mcu
+
+COPY fw_311_0x00004400_0x00007fff.dat /data/
+COPY fw_311_0x00050000_0x0007afff.dat /data/
 
 ENV TOOLCHAIN_PATH /usr/local/mcuxpressoide/ide/tools/bin
 ENV PATH $TOOLCHAIN_PATH:$PATH
-
-# add the sdk package
-RUN mkdir -p /root/mcuxpresso/02/SDKPackages &&\
-  mv SDK_${SDK_VERSION}_${SDK_TYPE}.zip /root/mcuxpresso/02/SDKPackages
-
-RUN rm mcuxpressoide-${IDE_VERSION}.x86_64.deb.bin
-RUN rm -rf mcu
