@@ -1127,8 +1127,14 @@ void menuUtilityRenderHeader(void)
 //				(trxGetMode() == RADIO_MODE_DIGITAL && settingsPrivateCallMuteMode == true)?" MUTE":"");// The location that this was displayed is now used for the power level
 				ucPrintCore(0, Y_OFFSET, "DMR", ((nonVolatileSettings.hotspotType != HOTSPOT_TYPE_OFF) ? FONT_6x8_BOLD : FONT_6x8), TEXT_ALIGN_LEFT, modeInverted);
 
-				snprintf(buffer, bufferLen, "%s%d", currentLanguage->ts, trxGetDMRTimeSlot() + 1);
-				buffer[bufferLen - 1] = 0;
+				const char *ts_or_tg = currentLanguage->ts; // TS filtering enabled
+				if (nonVolatileSettings.dmrFilterLevel >= DMR_FILTER_TS_TG)
+				{
+					ts_or_tg = currentLanguage->tg; // "simple" TG filtering enabled
+				}
+
+				snprintf(buffer, bufferLen, "%s%d", ts_or_tg, trxGetDMRTimeSlot() + 1);
+
 				if (nonVolatileSettings.dmrFilterLevel < DMR_FILTER_TS)
 				{
 					ucFillRect(20, Y_OFFSET - 1, 21, 9, false);
@@ -1136,11 +1142,6 @@ void menuUtilityRenderHeader(void)
 				}
 				else
 				{
-					if (nonVolatileSettings.dmrFilterLevel >= DMR_FILTER_TS_TG)
-					{
-						strcat(buffer, "G");
-					}
-
 					ucPrintCore(22, Y_OFFSET, buffer, FONT_6x8, TEXT_ALIGN_LEFT, false);
 //					if (nonVolatileSettings.tsManualOverride != 0)
 //					{
