@@ -131,7 +131,6 @@ static void updateScreen(void)
 					snprintf(buf, bufferLen, "%s:DMR", currentLanguage->mode);
 				}
 				break;
-			break;
 			case CH_DETAILS_DMR_CC:
 				if (tmpChannel.chMode == RADIO_MODE_ANALOG)
 				{
