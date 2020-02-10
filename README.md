@@ -1,4 +1,6 @@
 # OpenGD77
+[![Build Status](https://drone.teeed.eu/api/badges/Teeed/OpenGD77/status.svg)](https://drone.teeed.eu/Teeed/OpenGD77)
+
 Open source firmware for the Radioddity GD-77 dual band DMR / FM handheld transceiever, for Amateur Radio use.
 
 # What is this repo all about?
@@ -7,8 +9,6 @@ This repo contains version which supports TalkGroup filtering. It is also aimed 
 Developers on parent (rogerclarkmelbourne/OpenGD77) are [not willing to merge any changes from me](https://github.com/rogerclarkmelbourne/OpenGD77/pull/426), nor to read stdlib docs (which could really help them understand how some functions from stdlib work), even if docs clearly says they are wrong. So, the only way is to continue work in my own repo. However, I will merge "good" changes from main repo until it is possible (after cleanup it will probably be quite hard, since there will be a lot of code conflicts).
 
 # Releases
-[![Build Status](https://drone.teeed.eu/api/badges/Teeed/OpenGD77/status.svg)](https://drone.teeed.eu/Teeed/OpenGD77)
-
 For binary relases please have look at https://github.com/Teeed/OpenGD77/releases.
 
 # Project status
