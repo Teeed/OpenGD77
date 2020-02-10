@@ -186,7 +186,7 @@ static void menuLastHeardDisplayTA(uint8_t y, char *text, uint32_t time, uint32_
 		ucPrintAt(0, y, buffer, FONT_8x16);
 
 		// Time
-		snprintf(buffer, 5, "%d", diffTimeInMins);
+		snprintf(buffer, 5, "%u", diffTimeInMins);
 		buffer[5] = 0;
 
 		ucPrintAt((128 - (3 * 6)), (y + 6), "min", FONT_6x8);
