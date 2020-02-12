@@ -1136,13 +1136,7 @@ void menuUtilityRenderHeader(void)
 					ucPrintCore(DMR_TEXT_X_OFFSET, Y_OFFSET, "DMR", ((nonVolatileSettings.hotspotType != HOTSPOT_TYPE_OFF) ? FONT_6x8_BOLD : FONT_6x8), TEXT_ALIGN_LEFT, isInverted);
 				}
 
-				const char *ts_or_tg = currentLanguage->ts; // TS filtering enabled
-				if (nonVolatileSettings.dmrFilterLevel >= DMR_FILTER_TS_TG)
-				{
-					ts_or_tg = currentLanguage->tg; // "simple" TG filtering enabled
-				}
-
-				snprintf(buffer, bufferLen, "%s%d", ts_or_tg, trxGetDMRTimeSlot() + 1);
+				snprintf(buffer, bufferLen, "%s%d", currentLanguage->ts, trxGetDMRTimeSlot() + 1);
 
 				if (nonVolatileSettings.dmrFilterLevel < DMR_FILTER_TS)
 				{
