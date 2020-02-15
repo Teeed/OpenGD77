@@ -691,6 +691,7 @@ inline static void HRC6000SysReceivedDataInt(void)
 			// Detect/decode voice packet and transfer it into the output soundbuffer
 			if 	(
 					(
+						(
 							skip_count == 0 &&
 							receivedSrcId != trxDMRID &&
 							receivedSrcId!=0x00 &&
@@ -701,13 +702,15 @@ inline static void HRC6000SysReceivedDataInt(void)
 							checkTimeSlotFilter() &&
 							lastTimeCode != timeCode &&
 							rxColorCode == trxGetDMRColourCode()
+						)
+						||
+						(
+							trxDMRMode == DMR_MODE_ACTIVE &&
+							slot_state == DMR_STATE_RX_1
+						)
 					)
-					||
-					(
-						trxDMRMode == DMR_MODE_ACTIVE &&
-						slot_state == DMR_STATE_RX_1 &&
-						checkTalkGroupFilter()
-					)
+					&&
+					checkTalkGroupFilter()
 				)
 			{
 				//SEGGER_RTT_printf(0, "Audio frame %d\t%d\n",sequenceNumber,timeCode);
