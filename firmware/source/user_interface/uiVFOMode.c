@@ -1342,7 +1342,7 @@ static void updateQuickMenuScreen(void)
 				}
 				else
 				{
-					sprintf(buf, "%s %s", currentLanguage->tone_scan, currentLanguage->n_a, bufferLen);
+					snprintf(buf, bufferLen, "%s %s", currentLanguage->tone_scan, currentLanguage->n_a);
 				}
 				break;
 			default:
@@ -1350,7 +1350,6 @@ static void updateQuickMenuScreen(void)
 				break;
 		}
 
-		buf[bufferLen - 1] = 0;
 		menuDisplayEntry(i, mNum, buf);
 	}
 	ucRender();
