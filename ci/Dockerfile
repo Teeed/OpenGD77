@@ -46,8 +46,8 @@ RUN chmod a+x mcuxpressoide-${IDE_VERSION}.x86_64.deb.bin &&\
   rm mcuxpressoide-${IDE_VERSION}.x86_64.deb.bin &&\
   rm -rf mcu
 
-COPY fw_311_0x00004400_0x00007fff.dat /data/
-COPY fw_311_0x00050000_0x0007afff.dat /data/
+COPY codec_bin_section_1.bin /data/
+COPY codec_bin_section_2.bin /data/
 
 ENV TOOLCHAIN_PATH /usr/local/mcuxpressoide/ide/tools/bin
 ENV PATH $TOOLCHAIN_PATH:$PATH
