@@ -20,7 +20,7 @@
  * Translators: DG3GSP, DL4LEX
  *
  *
- * Rev: 3.6
+ * Rev: 3.8
  */
 #ifndef USER_INTERFACE_LANGUAGES_GERMAN_H_
 #define USER_INTERFACE_LANGUAGES_GERMAN_H_
@@ -46,6 +46,7 @@ const stringsTable_t germanLanguage =
 .last_heard				= "Zuletzt gehört", // MaxLen: 16
 .options				= "Einstellungen", // MaxLen: 16
 .display_options		= "Display Optionen", // MaxLen: 16
+.sound_options				= "Audio Optionen", // MaxLen: 16
 .channel_details		= "Kanal Details", // MaxLen: 16
 .new_contact			= "Neuer Kontakt", // MaxLen: 16
 .new_channel			= "Neuer Kanal", // MaxLen: 16, leave room for a space and four channel digits after
@@ -110,6 +111,7 @@ const stringsTable_t germanLanguage =
 .band_limits			= "Band Limit", // MaxLen: 16 (with ':' + .on or .off)
 .beep_volume			= "Beep Lauts", // MaxLen: 16 (with ':' + -24..6 + 'dB')
 .dmr_mic_gain			= "DMR Mikro", // MaxLen: 16 (with ':' + -33..12 + 'dB')
+.fm_mic_gain				= "FM Mikro", // MaxLen: 16 (with ':' + 0..31)
 .key_long				= "Key lang", // MaxLen: 11 (with ':' + x.xs fitted)
 .key_repeat				= "Key wied", // MaxLen: 11 (with ':' + x.xs fitted)
 .dmr_filter_timeout		= "DMR Filter", // MaxLen: 16 (with ':' + 1..90 + 's')
@@ -147,6 +149,11 @@ const stringsTable_t germanLanguage =
 .one_line				= "1 Zeile", // MaxLen 16 (with ':' + .contact)
 .two_lines				= "2 Zeilen", // MaxLen 16 (with ':' + .contact)
 .priority_order				= "ID-Prio", // MaxLen 16 (with ':' + 'Cc/DB/TA')
+.dmr_beep				= "DMR TX Ton", // MaxLen 16 (with ':' + .star/.stop/.both/.none)
+.start					= "Start", // MaxLen 16 (with ':' + .dmr_beep)
+.both					= "Beide", // MaxLen 16 (with ':' + .dmr_beep)
+.vox_threshold                          = "VOX Empf.", // MaxLen 16 (with ':' + .off or 1..30)
+.vox_tail                               = "VOX Dauer" // MaxLen 16 (with ':' + .n_a or '0.0s')
 };
 /********************************************************************
  *

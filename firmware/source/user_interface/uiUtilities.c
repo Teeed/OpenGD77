@@ -16,24 +16,32 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <hardware/fw_EEPROM.h>
-#include <hardware/fw_HR-C6000.h>
-#include <hardware/fw_SPI_Flash.h>
+#include <EEPROM.h>
 #include <user_interface/menuSystem.h>
 #include <user_interface/uiUtilities.h>
 #include <user_interface/uiLocalisation.h>
-#include "fw_trx.h"
-#include "fw_settings.h"
 #include <math.h>
-#include <functions/fw_ticks.h>
+#include <HR-C6000.h>
+#include <settings.h>
+#include <SPI_Flash.h>
+#include <ticks.h>
+#include <trx.h>
 
 settingsStruct_t originalNonVolatileSettings;
 
 const int QSO_TIMER_TIMEOUT = 2400;
+
+#if defined(PLATFORM_RD5R)
+const int TX_TIMER_Y_OFFSET = 12;
+const int CONTACT_Y_POS = 12;
+static const int BAR_Y_POS = 8;
+#else
 const int TX_TIMER_Y_OFFSET = 8;
 const int CONTACT_Y_POS = 16;
-const int FREQUENCY_X_POS = /* '>Ta'*/ (3 * 8) + 4;
 static const int BAR_Y_POS = 10;
+#endif
+
+const int FREQUENCY_X_POS = /* '>Ta'*/ (3 * 8) + 4;
 const int MAX_POWER_SETTING_NUM = 9;
 
 static const int DMRID_MEMORY_STORAGE_START = 0x30000;
@@ -49,14 +57,53 @@ uint32_t menuUtilityReceivedPcId 	= 0;// No current Private call awaiting accept
 uint32_t menuUtilityTgBeforePcMode 	= 0;// No TG saved, prior to a Private call being accepted.
 
 const char *POWER_LEVELS[]={ "50mW","250mW","500mW","750mW","1W","2W","3W","4W","5W","5W++"};
-const char *DMR_FILTER_LEVELS[]={"None","CC","CC,TS","CC,TS,TG","CC,TS,Ct"};
+const char *DMR_FILTER_LEVELS[]={"None","CC","CC,TS","CC,TS,TG","CC,TS,Ct","CC,TS,RxG"};
+const char *ANALOG_FILTER_LEVELS[]={"None","CTCSS|DCS"};
 
 volatile uint32_t lastID=0;// This needs to be volatile as lastHeardClearLastID() is called from an ISR
 uint32_t lastTG=0;
 
 static dmrIDsCache_t dmrIDsCache;
 
+int nuisanceDelete[MAX_ZONE_SCAN_NUISANCE_CHANNELS];
+int nuisanceDeleteIndex;
+int scanTimer=0;
+bool scanActive=false;
+ScanState_t scanState = SCAN_SCANNING;		//state flag for scan routine.
+int scanDirection = 1;
 
+bool displaySquelch=false;
+
+char freq_enter_digits[12] = { '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-' };
+int freq_enter_idx;
+
+struct_codeplugRxGroup_t currentRxGroupData;
+struct_codeplugContact_t currentContactData;
+
+const int SCAN_SHORT_PAUSE_TIME = 500;			//time to wait after carrier detected to allow time for full signal detection. (CTCSS or DMR)
+const int SCAN_TOTAL_INTERVAL = 30;			    //time between each scan step
+const int SCAN_DMR_SIMPLEX_MIN_INTERVAL=60;		//minimum time between steps when scanning DMR Simplex. (needs extra time to capture TDMA Pulsing)
+const int SCAN_FREQ_CHANGE_SETTLING_INTERVAL = 1;//Time after frequency is changed before RSSI sampling starts
+const int SCAN_SKIP_CHANNEL_INTERVAL = 1;		//This is actually just an implicit flag value to indicate the channel should be skipped
+
+
+bool isQSODataAvailableForCurrentTalker(void)
+{
+	LinkItem_t *item = NULL;
+	uint32_t rxID = HRC6000GetReceivedSrcId();
+
+	// We're in digital mode, RXing, and current talker is already at the top of last heard list,
+	// hence immediately display complete contact/TG info on screen
+	if ((trxIsTransmitting == false) && ((trxGetMode() == RADIO_MODE_DIGITAL) && (rxID != 0) && (HRC6000GetReceivedTgOrPcId() != 0)) &&
+			(getAudioAmpStatus() & AUDIO_AMP_MODE_RF)
+			&& checkTalkGroupFilter() &&
+			(((item = lastheardFindInList(rxID)) != NULL) && (item == LinkHead)))
+	{
+		return true;
+	}
+
+	return false;
+}
 
 /*
  * Remove space at the end of the array, and return pointer to first non space character
@@ -813,7 +860,7 @@ bool contactIDLookup(uint32_t id, int calltype, char *buffer)
 
 static void displayChannelNameOrRxFrequency(char *buffer, size_t maxLen)
 {
-	if (menuSystemGetCurrentMenuNumber() == MENU_CHANNEL_MODE)
+	if (menuSystemGetCurrentMenuNumber() == UI_CHANNEL_MODE)
 	{
 		codeplugUtilConvertBufToString(currentChannelData->name,buffer,16);
 	}
@@ -824,7 +871,12 @@ static void displayChannelNameOrRxFrequency(char *buffer, size_t maxLen)
 		snprintf(buffer, maxLen, "%d.%05d MHz", val_before_dp, val_after_dp);
 		buffer[maxLen - 1] = 0;
 	}
-	ucPrintCentered(52, buffer, FONT_6x8);
+
+#if defined(PLATFORM_RD5R)
+	ucPrintCentered(41, buffer, FONT_SIZE_1);
+#else
+	ucPrintCentered(52, buffer, FONT_SIZE_1);
+#endif
 }
 
 static void printSplitOrSpanText(uint8_t y, char *text)
@@ -836,7 +888,7 @@ static void printSplitOrSpanText(uint8_t y, char *text)
 
 	if (len <= 16)
 	{
-		ucPrintCentered(y, text, FONT_8x16);
+		ucPrintCentered(y, text, FONT_SIZE_3);
 	}
 	else
 	{
@@ -866,24 +918,24 @@ static void printSplitOrSpanText(uint8_t y, char *text)
 
 				buffer[21] = 0;
 
-				ucPrintCentered(y, buffer, FONT_6x8); // 2 pixels are saved, could center
+				ucPrintCentered(y, buffer, FONT_SIZE_1); // 2 pixels are saved, could center
 
 				buffer[21] = c;
 				buffer[42] = 0;
 
-				ucPrintCentered(y + 8, buffer + 21, FONT_6x8);
+				ucPrintCentered(y + 8, buffer + 21, FONT_SIZE_1);
 			}
 			else
 			{
 				*p = 0;
 
-				ucPrintCentered(y, buffer, FONT_6x8);
-				ucPrintCentered(y + 8, p + 1, FONT_6x8);
+				ucPrintCentered(y, buffer, FONT_SIZE_1);
+				ucPrintCentered(y + 8, p + 1, FONT_SIZE_1);
 			}
 		}
 		else // One line of 21 chars max
 		{
-			ucPrintCentered(y + 4, text, FONT_6x8);
+			ucPrintCentered(y + 4, text, FONT_SIZE_1);
 		}
 	}
 }
@@ -910,7 +962,11 @@ static void displayContactTextInfos(char *text, size_t maxLen, bool isFromTalker
 		{
 			memcpy(buffer, text, 17);
 			buffer[16] = 0;
-			ucPrintCentered(32, chomp(buffer), FONT_8x16);
+#if defined(PLATFORM_RD5R)
+			ucPrintCentered(28, chomp(buffer), FONT_SIZE_3);
+#else
+			ucPrintCentered(32, chomp(buffer), FONT_SIZE_3);
+#endif
 			displayChannelNameOrRxFrequency(buffer, (sizeof(buffer) / sizeof(buffer[0])));
 			return;
 		}
@@ -920,15 +976,23 @@ static void displayContactTextInfos(char *text, size_t maxLen, bool isFromTalker
 			// Callsign found
 			memcpy(buffer, text, cpos);
 			buffer[cpos] = 0;
-			ucPrintCentered(32, chomp(buffer), FONT_8x16);
 
+#if defined(PLATFORM_RD5R)
+			ucPrintCentered(28, chomp(buffer), FONT_SIZE_3);
+#else
+			ucPrintCentered(32, chomp(buffer), FONT_SIZE_3);
+#endif
 			memcpy(buffer, text + (cpos + 1), (maxLen - (cpos + 1)));
 			buffer[(strlen(text) - (cpos + 1))] = 0;
 
 			pbuf = chomp(buffer);
 
 			if (strlen(pbuf))
+#if defined(PLATFORM_RD5R)
+				printSplitOrSpanText(32, pbuf);
+#else
 				printSplitOrSpanText(48, pbuf);
+#endif
 			else
 				displayChannelNameOrRxFrequency(buffer, (sizeof(buffer) / sizeof(buffer[0])));
 		}
@@ -938,15 +1002,22 @@ static void displayContactTextInfos(char *text, size_t maxLen, bool isFromTalker
 			memcpy(buffer, text, 16);
 			buffer[16] = 0;
 
-			ucPrintCentered(32, chomp(buffer), FONT_8x16);
-
+#if defined(PLATFORM_RD5R)
+			ucPrintCentered(24, chomp(buffer), FONT_SIZE_3);
+#else
+			ucPrintCentered(32, chomp(buffer), FONT_SIZE_3);
+#endif
 			memcpy(buffer, text + 16, (maxLen - 16));
 			buffer[(strlen(text) - 16)] = 0;
 
 			pbuf = chomp(buffer);
 
 			if (strlen(pbuf))
+#if defined(PLATFORM_RD5R)
+				printSplitOrSpanText(32, pbuf);
+#else
 				printSplitOrSpanText(48, pbuf);
+#endif
 			else
 				displayChannelNameOrRxFrequency(buffer, (sizeof(buffer) / sizeof(buffer[0])));
 		}
@@ -955,7 +1026,12 @@ static void displayContactTextInfos(char *text, size_t maxLen, bool isFromTalker
 	{
 		memcpy(buffer, text, 17);
 		buffer[16] = 0;
-		ucPrintCentered(32, chomp(buffer), FONT_8x16);
+
+#if defined(PLATFORM_RD5R)
+		ucPrintCentered(24, chomp(buffer), FONT_SIZE_3);
+#else
+		ucPrintCentered(32, chomp(buffer), FONT_SIZE_3);
+#endif
 		displayChannelNameOrRxFrequency(buffer, (sizeof(buffer) / sizeof(buffer[0])));
 	}
 }
@@ -981,27 +1057,46 @@ void menuUtilityRenderQSOData(void)
 		if ((LinkHead->talkGroupOrPcId >> 24) == PC_CALL_FLAG) // &&  (LinkHead->id & 0xFFFFFF) != (trxTalkGroupOrPcId & 0xFFFFFF))
 		{
 			// Its a Private call
-			ucPrintCentered(16, LinkHead->contact, FONT_8x16);
-			ucPrintCentered(32, currentLanguage->private_call, FONT_8x16);
+			ucPrintCentered(16, LinkHead->contact, FONT_SIZE_3);
+
+			ucPrintCentered((DISPLAY_SIZE_Y/2), currentLanguage->private_call, FONT_SIZE_3);
 
 			if (LinkHead->talkGroupOrPcId != (trxDMRID | (PC_CALL_FLAG << 24)))
 			{
-				ucPrintCentered(52, LinkHead->talkgroup, FONT_6x8);
-				ucPrintAt(1, 52, "=>", FONT_6x8);
+#if defined(PLATFORM_RD5R)
+				ucPrintCentered(41, LinkHead->talkgroup, FONT_SIZE_1);
+				ucPrintAt(1, 41, "=>", FONT_SIZE_1);
+#else
+				ucPrintCentered(52, LinkHead->talkgroup, FONT_SIZE_1);
+				ucPrintAt(1, 52, "=>", FONT_SIZE_1);
+#endif
 			}
 		}
 		else
 		{
 			// Group call
-			if ((LinkHead->talkGroupOrPcId & 0xFFFFFF) != trxTalkGroupOrPcId || (dmrMonitorCapturedTS!=-1 && dmrMonitorCapturedTS != trxGetDMRTimeSlot()))
+			if (	(LinkHead->talkGroupOrPcId & 0xFFFFFF) != trxTalkGroupOrPcId ||
+					(dmrMonitorCapturedTS!=-1 && dmrMonitorCapturedTS != trxGetDMRTimeSlot()) ||
+					(trxGetDMRColourCode() != currentChannelData->rxColor))
 			{
+#if defined(PLATFORM_RD5R)
+				// draw the text in inverse video
+				ucFillRect(0, CONTACT_Y_POS + 1, DISPLAY_SIZE_X, 10, false);
+				ucPrintCore(0, CONTACT_Y_POS + 2, LinkHead->talkgroup, FONT_SIZE_3, TEXT_ALIGN_CENTER, true);
+#else
 				// draw the text in inverse video
 				ucClearRows(2, 4, true);
-				ucPrintCore(0, CONTACT_Y_POS, LinkHead->talkgroup, FONT_8x16, TEXT_ALIGN_CENTER, true);
+				ucPrintCore(0, CONTACT_Y_POS, LinkHead->talkgroup, FONT_SIZE_3, TEXT_ALIGN_CENTER, true);
+#endif
 			}
 			else
 			{
-				ucPrintCentered(CONTACT_Y_POS, LinkHead->talkgroup, FONT_8x16);
+#if defined(PLATFORM_RD5R)
+				ucPrintCentered(CONTACT_Y_POS + 2, LinkHead->talkgroup, FONT_SIZE_3);
+#else
+				ucPrintCentered(CONTACT_Y_POS, LinkHead->talkgroup, FONT_SIZE_3);
+#endif
+
 			}
 
 			switch (nonVolatileSettings.contactDisplayPriority)
@@ -1060,7 +1155,11 @@ void menuUtilityRenderQSOData(void)
 
 void menuUtilityRenderHeader(void)
 {
+#if defined(PLATFORM_RD5R)
+	const int Y_OFFSET = 0;
+#else
 	const int Y_OFFSET = 2;
+#endif
 	static const int bufferLen = 17;
 	char buffer[bufferLen];
 	static bool scanBlinkPhase = true;
@@ -1078,14 +1177,13 @@ void menuUtilityRenderHeader(void)
 		}
 	}
 
-	if (menuChannelModeIsScanning() || menuVFOModeIsScanning())
+	if (scanActive &&  uiVFOModeIsScanning())
 	{
 		int blinkPeriod = 1000;
 		if (scanBlinkPhase)
 		{
 			blinkPeriod = 500;
 		}
-
 
 		if ((fw_millis() - blinkTime) > blinkPeriod)
 		{
@@ -1098,6 +1196,8 @@ void menuUtilityRenderHeader(void)
 		scanBlinkPhase = false;
 	}
 
+	const int MODE_TEXT_X_OFFSET = 1;
+	const int FILTER_TEXT_X_OFFSET = 25;
 	switch(trxGetMode())
 	{
 		case RADIO_MODE_ANALOG:
@@ -1106,25 +1206,42 @@ void menuUtilityRenderHeader(void)
 			{
 				strcat(buffer,"N");
 			}
-			if ((currentChannelData->txTone!=65535)||(currentChannelData->rxTone!=65535))
+			ucPrintCore(MODE_TEXT_X_OFFSET, Y_OFFSET, buffer, ((nonVolatileSettings.hotspotType != HOTSPOT_TYPE_OFF) ? FONT_SIZE_1_BOLD : FONT_SIZE_1), TEXT_ALIGN_LEFT, scanBlinkPhase);
+
+			if ((currentChannelData->txTone != CODEPLUG_CSS_NONE) || (currentChannelData->rxTone != CODEPLUG_CSS_NONE))
 			{
-				strcat(buffer," C");
+				int rectWidth = 9;
+				if (codeplugChannelToneIsDCS(currentChannelData->txTone))
+				{
+					strcpy(buffer, "D");
+				}
+				else
+				{
+					strcpy(buffer, "C");
+				}
+				if (currentChannelData->txTone != CODEPLUG_CSS_NONE)
+				{
+					rectWidth += 6;
+					strcat(buffer, "T");
+				}
+				if (currentChannelData->rxTone != CODEPLUG_CSS_NONE)
+				{
+					rectWidth += 6;
+					strcat(buffer, "R");
+				}
+
+				bool isInverted = (nonVolatileSettings.analogFilterLevel == ANALOG_FILTER_NONE);
+				if (isInverted)
+				{
+					ucFillRect(FILTER_TEXT_X_OFFSET - 2, Y_OFFSET - 1, rectWidth, 9, false);
+				}
+				ucPrintCore(FILTER_TEXT_X_OFFSET, Y_OFFSET, buffer, FONT_SIZE_1, TEXT_ALIGN_LEFT, isInverted);
 			}
-			if (currentChannelData->txTone!=65535)
-			{
-				strcat(buffer,"T");
-			}
-			if (currentChannelData->rxTone!=65535)
-			{
-				strcat(buffer,"R");
-			}
-			ucPrintCore(0, Y_OFFSET, buffer, FONT_6x8, TEXT_ALIGN_LEFT, scanBlinkPhase);
 			break;
 
 		case RADIO_MODE_DIGITAL:
 			if (settingsUsbMode != USB_MODE_HOTSPOT)
 			{
-				const int DMR_TEXT_X_OFFSET = 1;
 //				(trxGetMode() == RADIO_MODE_DIGITAL && settingsPrivateCallMuteMode == true)?" MUTE":"");// The location that this was displayed is now used for the power level
 				if (!scanBlinkPhase && (nonVolatileSettings.dmrFilterLevel > DMR_FILTER_CC_TS))
 				{
@@ -1133,24 +1250,24 @@ void menuUtilityRenderHeader(void)
 				if (!scanBlinkPhase)
 				{
 					bool isInverted = scanBlinkPhase ^ (nonVolatileSettings.dmrFilterLevel > DMR_FILTER_CC_TS);
-					ucPrintCore(DMR_TEXT_X_OFFSET, Y_OFFSET, "DMR", ((nonVolatileSettings.hotspotType != HOTSPOT_TYPE_OFF) ? FONT_6x8_BOLD : FONT_6x8), TEXT_ALIGN_LEFT, isInverted);
+					ucPrintCore(MODE_TEXT_X_OFFSET, Y_OFFSET, "DMR", ((nonVolatileSettings.hotspotType != HOTSPOT_TYPE_OFF) ? FONT_SIZE_1_BOLD : FONT_SIZE_1), TEXT_ALIGN_LEFT, isInverted);
 				}
 
 				snprintf(buffer, bufferLen, "%s%d", currentLanguage->ts, trxGetDMRTimeSlot() + 1);
 				buffer[bufferLen - 1] = 0;
 				if (nonVolatileSettings.dmrFilterLevel < DMR_FILTER_CC_TS)
 				{
-					ucFillRect(20, Y_OFFSET - 1, 21, 9, false);
-					ucPrintCore(22, Y_OFFSET, buffer, FONT_6x8, TEXT_ALIGN_LEFT, true);
+					ucFillRect(FILTER_TEXT_X_OFFSET - 2, Y_OFFSET - 1, 21, 9, false);
+					ucPrintCore(FILTER_TEXT_X_OFFSET, Y_OFFSET, buffer, FONT_SIZE_1, TEXT_ALIGN_LEFT, true);
 				}
 				else
 				{
-					ucPrintCore(22, Y_OFFSET, buffer, FONT_6x8, TEXT_ALIGN_LEFT, false);
+					ucPrintCore(FILTER_TEXT_X_OFFSET, Y_OFFSET, buffer, FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
 //					if (nonVolatileSettings.tsManualOverride != 0)
 //					{
 //						ucFillRect(34, Y_OFFSET, 7, 8, false);
 //						snprintf(buffer, bufferLen, "%d", trxGetDMRTimeSlot() + 1);
-//						ucPrintCore(35, Y_OFFSET, buffer, FONT_6x8, TEXT_ALIGN_LEFT, true);
+//						ucPrintCore(35, Y_OFFSET, buffer, FONT_SIZE_1, TEXT_ALIGN_LEFT, true);
 //					}
 				}
 			}
@@ -1163,24 +1280,14 @@ void menuUtilityRenderHeader(void)
 		strcat(buffer," L");
 	}*/
 
-	ucPrintCentered(Y_OFFSET, (char *)POWER_LEVELS[nonVolatileSettings.txPowerLevel], FONT_6x8);
+	ucPrintCentered(Y_OFFSET, (char *)POWER_LEVELS[nonVolatileSettings.txPowerLevel], FONT_SIZE_1);
 
-
-	int  batteryPerentage = (int)(((averageBatteryVoltage - CUTOFF_VOLTAGE_UPPER_HYST) * 100) / (BATTERY_MAX_VOLTAGE - CUTOFF_VOLTAGE_UPPER_HYST));
-	if (batteryPerentage>100)
-	{
-		batteryPerentage=100;
-	}
-	if (batteryPerentage<0)
-	{
-		batteryPerentage=0;
-	}
 	if (settingsUsbMode == USB_MODE_HOTSPOT || trxGetMode() == RADIO_MODE_ANALOG)
 	{
 		// In hotspot mode the CC is show as part of the rest of the display and in Analogue mode the CC is meaningless
-		snprintf(buffer, bufferLen, "%d%%", batteryPerentage);
+		snprintf(buffer, bufferLen, "%d%%", getBatteryPercentage());
 		buffer[bufferLen - 1] = 0;
-		ucPrintCore(0, Y_OFFSET, buffer, FONT_6x8, TEXT_ALIGN_RIGHT, false);// Display battery percentage at the right
+		ucPrintCore(0, Y_OFFSET, buffer, FONT_SIZE_1, TEXT_ALIGN_RIGHT, false);// Display battery percentage at the right
 	}
 	else
 	{
@@ -1192,11 +1299,11 @@ void menuUtilityRenderHeader(void)
 			ucFillRect(COLOR_CODE_X_POSITION - 1, Y_OFFSET - 1,13 + ((ccode > 9)*6) ,9,false);
 		}
 
-		ucPrintCore(COLOR_CODE_X_POSITION, Y_OFFSET, buffer, FONT_6x8, TEXT_ALIGN_LEFT, nonVolatileSettings.dmrFilterLevel == DMR_FILTER_NONE);
+		ucPrintCore(COLOR_CODE_X_POSITION, Y_OFFSET, buffer, FONT_SIZE_1, TEXT_ALIGN_LEFT, nonVolatileSettings.dmrFilterLevel == DMR_FILTER_NONE);
 
-		snprintf(buffer, bufferLen, "%d%%", batteryPerentage);
+		snprintf(buffer, bufferLen, "%d%%", getBatteryPercentage());
 		buffer[bufferLen - 1] = 0;
-		ucPrintCore(0, Y_OFFSET, buffer, FONT_6x8, TEXT_ALIGN_RIGHT, false);// Display battery percentage at the right
+		ucPrintCore(0, Y_OFFSET, buffer, FONT_SIZE_1, TEXT_ALIGN_RIGHT, false);// Display battery percentage at the right
 	}
 
 }
@@ -1205,7 +1312,7 @@ void drawRSSIBarGraph(void)
 {
 	int dBm,barGraphLength;
 
-	ucFillRect(0, BAR_Y_POS,128,4,true);
+	ucFillRect(0, BAR_Y_POS, DISPLAY_SIZE_X, 4, true);
 
 	if (trxCurrentBand[TRX_RX_FREQ_BAND] == RADIO_BAND_UHF)
 	{
@@ -1233,21 +1340,30 @@ void drawRSSIBarGraph(void)
 	trxRxSignal=0;
 }
 
-void drawDMRMicLevelBarGraph(void)
+void drawFMMicLevelBarGraph(void)
 {
-	float barGraphLength = sqrt(micAudioSamplesTotal)*1.5;
+	trxReadVoxAndMicStrength();
 
-	ucFillRect(0, BAR_Y_POS,128,3,true);
+	uint8_t micdB = (trxTxMic >> 1); // trxTxMic is in 0.5dB unit, displaying 50dB .. 100dB
+	uint16_t w = 0;
 
-	if (barGraphLength > 127)
-	{
-		barGraphLength = 127;
-	}
+	// display from 50dB to 100dB, span over 128pix
+	w = (uint16_t)(((float)DISPLAY_SIZE_X / 50.0) * ((float)micdB - 50.0));
 
-	ucFillRect(0, BAR_Y_POS,(int)barGraphLength,3,false);
+	ucFillRect(0, BAR_Y_POS, DISPLAY_SIZE_X, 3, true);
+	ucFillRect(0, BAR_Y_POS, (int16_t)((w > (DISPLAY_SIZE_X - 1)) ? (DISPLAY_SIZE_X - 1) : w), 3, false);
 }
 
-void setOverrideTGorPC(int tgOrPc, bool privateCall) {
+void drawDMRMicLevelBarGraph(void)
+{
+	uint16_t barGraphLength = (uint16_t)(sqrt(micAudioSamplesTotal) * 1.5);
+
+	ucFillRect(0, BAR_Y_POS, DISPLAY_SIZE_X, 3, true);
+	ucFillRect(0, BAR_Y_POS, (int16_t)((barGraphLength > (DISPLAY_SIZE_X - 1)) ? (DISPLAY_SIZE_X - 1) : barGraphLength), 3, false);
+}
+
+void setOverrideTGorPC(int tgOrPc, bool privateCall)
+{
 	int tmpTGorPC = nonVolatileSettings.overrideTG;
 
 	menuUtilityTgBeforePcMode = 0;
@@ -1270,56 +1386,110 @@ void printToneAndSquelch(void)
 	char buf[24];
 	if (trxGetMode() == RADIO_MODE_ANALOG)
 	{
-		int offset = 0;
-		if (currentChannelData->rxTone == TRX_CTCSS_TONE_NONE)
+		if (codeplugChannelToneIsCTCSS(currentChannelData->rxTone))
 		{
-			offset = snprintf(buf, sizeof(buf), "CTCSS:%s|", currentLanguage->none);
+			snprintf(buf, sizeof(buf), "Rx:%d.%dHz|", currentChannelData->rxTone / 10 , currentChannelData->rxTone % 10);
+		}
+		else if (codeplugChannelToneIsDCS(currentChannelData->rxTone))
+		{
+			snprintf(buf, sizeof(buf), "Rx:D%03oN|", currentChannelData->rxTone & 0777);
 		}
 		else
 		{
-			offset = snprintf(buf, sizeof(buf), "CTCSS:%d.%dHz|", currentChannelData->rxTone / 10 , currentChannelData->rxTone % 10);
+			snprintf(buf, sizeof(buf), "Rx:%s|", currentLanguage->none);
 		}
 
-		if (offset < 0)
+		if (codeplugChannelToneIsCTCSS(currentChannelData->txTone))
 		{
-			ucPrintCentered(16, "ferr pATAS()", FONT_6x8);
-			return;
+			snprintf(buf, sizeof(buf), "%sTx:%d.%dHz", buf, currentChannelData->txTone / 10 , currentChannelData->txTone % 10);
 		}
-
-		if (currentChannelData->txTone == TRX_CTCSS_TONE_NONE)
+		else if (codeplugChannelToneIsDCS(currentChannelData->txTone))
 		{
-			snprintf(buf+offset, sizeof(buf)-offset, "%s", currentLanguage->none);
+			snprintf(buf, sizeof(buf), "%sTx:D%03oN", buf, currentChannelData->txTone & 0777);
 		}
 		else
 		{
-			snprintf(buf+offset, sizeof(buf)-offset, "%d.%dHz", currentChannelData->txTone / 10 , currentChannelData->txTone % 10);
+			snprintf(buf, sizeof(buf), "%sTx:%s", buf, currentLanguage->none);
 		}
-		ucPrintCentered(16, buf, FONT_6x8);
+
+#if defined(PLATFORM_RD5R)
+		ucPrintCentered(13, buf, FONT_SIZE_1);
+		snprintf(buf, sizeof(buf), "SQL:%d%%", 5*(((currentChannelData->sql == 0) ? nonVolatileSettings.squelchDefaults[trxCurrentBand[TRX_RX_FREQ_BAND]] : currentChannelData->sql)-1));
+		ucPrintCentered(21 + 1, buf, FONT_SIZE_1);
+#else
+		ucPrintCentered(16, buf, FONT_SIZE_1);
 
 		snprintf(buf, sizeof(buf), "SQL:%d%%", 5*(((currentChannelData->sql == 0) ? nonVolatileSettings.squelchDefaults[trxCurrentBand[TRX_RX_FREQ_BAND]] : currentChannelData->sql)-1));
-		ucPrintCentered(24 + 1, buf, FONT_6x8);
+		ucPrintCentered(24 + 1, buf, FONT_SIZE_1);
+#endif
+
 	}
 }
 
-void printFrequency(bool isTX, bool hasFocus, uint8_t y, uint32_t frequency, bool displayVFOChannel)
+void printFrequency(bool isTX, bool hasFocus, uint8_t y, uint32_t frequency, bool displayVFOChannel, bool isScanMode)
 {
+#if defined(PLATFORM_RD5R)
+const int VFO_LETTER_Y_OFFSET = 0;// This is the different in height of the SIZE_1 and SIZE_3 fonts
+#else
+const int VFO_LETTER_Y_OFFSET = 8;// This is the different in height of the SIZE_1 and SIZE_3 fonts
+#endif
 	static const int bufferLen = 17;
 	char buffer[bufferLen];
 	int val_before_dp = frequency / 100000;
 	int val_after_dp = frequency - val_before_dp * 100000;
 
 	// Focus + direction
-	snprintf(buffer, bufferLen, "%c%c", (hasFocus ? '>' : ' '), (isTX ? 'T' : 'R'));
-	ucPrintAt(0, y, buffer, FONT_8x16);
+	snprintf(buffer, bufferLen, "%c%c", ((hasFocus && !isScanMode)? '>' : ' '), (isTX ? 'T' : 'R'));
+
+	ucPrintAt(0, y, buffer, FONT_SIZE_3);
 	// VFO
 	if (displayVFOChannel)
 	{
-		ucPrintAt(16, y + 8, (nonVolatileSettings.currentVFONumber == 0) ? "A" : "B", FONT_8x8);
+		ucPrintAt(16, y + VFO_LETTER_Y_OFFSET, (nonVolatileSettings.currentVFONumber == 0) ? "A" : "B", FONT_SIZE_1);
 	}
 	// Frequency
 	snprintf(buffer, bufferLen, "%d.%05d", val_before_dp, val_after_dp);
 	buffer[bufferLen - 1] = 0;
-	ucPrintAt(FREQUENCY_X_POS, y, buffer, FONT_8x16);
-	// Unit
-	ucPrintAt(128 - (3 * 8), y, "MHz", FONT_8x16);
+	ucPrintAt(FREQUENCY_X_POS, y, buffer, FONT_SIZE_3);
+	ucPrintAt(DISPLAY_SIZE_X - (3 * 8), y, "MHz", FONT_SIZE_3);
+}
+
+void reset_freq_enter_digits(void)
+{
+	for (int i=0;i<12;i++)
+	{
+		freq_enter_digits[i]='-';
+	}
+	freq_enter_idx = 0;
+}
+
+int read_freq_enter_digits(int startDigit, int endDigit)
+{
+	int result=0;
+	for (int i=startDigit;i<endDigit;i++)
+	{
+		result=result*10;
+		if ((freq_enter_digits[i]>='0') && (freq_enter_digits[i]<='9'))
+		{
+			result=result+freq_enter_digits[i]-'0';
+		}
+	}
+	return result;
+}
+
+int getBatteryPercentage(void)
+{
+	int  batteryPerentage = (int)(((averageBatteryVoltage - CUTOFF_VOLTAGE_UPPER_HYST) * 100) / (BATTERY_MAX_VOLTAGE - CUTOFF_VOLTAGE_UPPER_HYST));
+
+	if (batteryPerentage > 100)
+	{
+		batteryPerentage = 100;
+	}
+
+	if (batteryPerentage < 0)
+	{
+		batteryPerentage = 0;
+	}
+
+	return batteryPerentage;
 }

@@ -20,7 +20,7 @@
  * Translators: EA3IGM, EA5SW, EB3AM, EA3BIL
  *
  *
- * Rev: 4
+ * Rev: 5
  */
 #ifndef USER_INTERFACE_LANGUAGES_CATALAN_H_
 #define USER_INTERFACE_LANGUAGES_CATALAN_H_
@@ -46,6 +46,7 @@ const stringsTable_t catalanLanguage=
 .last_heard				= "Escoltats",
 .options				= "Opcions",
 .display_options		= "Opcions pantalla",
+.sound_options			= "Opcions de só", // MaxLen: 16
 .channel_details		= "Detalls Canal",
 .new_contact			= "Nou contacte",
 .new_channel			= "Nou canal", // MaxLen: 16, leave room for a space and four channel digits after
@@ -74,7 +75,7 @@ const stringsTable_t catalanLanguage=
 .squelch				= "Squelch",
 .quick_menu				= "Menú Ràpid",
 .filter					= "Filtre",
-.all_channels			= "Tots els Canals",
+.all_channels			= "Llista total",
 .gotoChannel			= "Anar al canal",
 .scan					= "Scan",
 .channelToVfo			= "Canal -> VFO",
@@ -84,7 +85,7 @@ const stringsTable_t catalanLanguage=
 .private				= "Privada",
 .all					= "Tots",
 .type					= "Tipus",
-.timeSlot				= "TimeSlot",
+.timeSlot				= "TS",
 .none					= "Cap",
 .contact_saved			= "Contacte Desat",
 .duplicate				= "Duplicat",
@@ -104,12 +105,13 @@ const stringsTable_t catalanLanguage=
 .no						= "No",
 .rx_group				= "Llista TG/ID",
 .on						= "Sí",
-.timeout_beep			= "Avís de temps",
+.timeout_beep			= "Avís T.O.T.",
 .factory_reset			= "Reinici fabr.",
 .calibration			= "Calibració",
 .band_limits			= "Límit bandes",
 .beep_volume			= "Volum tons",
 .dmr_mic_gain			= "Mic DMR",
+.fm_mic_gain				= "FM mic", // MaxLen: 16 (with ':' + 0..31)
 .key_long				= "Prem llarg",
 .key_repeat				= "Prem rpt",
 .dmr_filter_timeout		= "Filtre temps",
@@ -145,8 +147,13 @@ const stringsTable_t catalanLanguage=
 .private_call_handling	= "Gestió PC", // MaxLen 16 (with ':' + .on ot .off)
 .stop					= "Stop", // Maxlen 16 (with ':' + .scan_mode)
 .one_line				= "1 línia", // MaxLen 16 (with ':' + .contact)
-.two_lines				= "2 linies", // MaxLen 16 (with ':' + .contact)
+.two_lines				= "2 línies", // MaxLen 16 (with ':' + .contact)
 .priority_order			= "Prio.", // MaxLen 16 (with ':' + 'Cc/DB/TA')
+.dmr_beep				= "DMR Beep", // MaxLen 16 (with ':' + .star/.stop/.both/.none)
+.start					= "Inici", // MaxLen 16 (with ':' + .dmr_beep)
+.both					= "Tots", // MaxLen 16 (with ':' + .dmr_beep)
+.vox_threshold                          = "VOX Thres.", // MaxLen 16 (with ':' + .off or 1..30)
+.vox_tail                               = "VOX Tail" // MaxLen 16 (with ':' + .n_a or '0.0s')
 };
 /********************************************************************
  *

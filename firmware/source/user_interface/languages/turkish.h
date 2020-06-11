@@ -46,6 +46,7 @@ const stringsTable_t turkishLanguage =
 .last_heard				= "Son Duyulanlar", // MaxLen: 16
 .options				= "Opsiyonlar", // MaxLen: 16
 .display_options			= "Ekran Opsiyon", // MaxLen: 16
+.sound_options				= "Sound options", // MaxLen: 16
 .channel_details			= "Kanal Detay", // MaxLen: 16
 .new_contact				= "Yeni Ki–i", // MaxLen: 16
 .new_channel				= "Yeni Kanal", // MaxLen: 16, leave room for a space and four channel digits after
@@ -110,6 +111,7 @@ const stringsTable_t turkishLanguage =
 .band_limits				= "Band S“n“r“", // MaxLen: 16 (with ':' + .on or .off)
 .beep_volume				= "Bip sesi", // MaxLen: 16 (with ':' + -24..6 + 'dB')
 .dmr_mic_gain				= "DMR mic", // MaxLen: 16 (with ':' + -33..12 + 'dB')
+.fm_mic_gain				= "FM mic", // MaxLen: 16 (with ':' + 0..31)
 .key_long				= "Tu– Uzun", // MaxLen: 11 (with ':' + x.xs fitted)
 .key_repeat				= "Tu– rpt", // MaxLen: 11 (with ':' + x.xs fitted)
 .dmr_filter_timeout			= "FiltreSüre", // MaxLen: 16 (with ':' + 1..90 + 's')
@@ -147,6 +149,11 @@ const stringsTable_t turkishLanguage =
 .one_line				= "1 sat“r", // MaxLen 16 (with ':' + .contact)
 .two_lines				= "2 sat“r", // MaxLen 16 (with ':' + .contact)
 .priority_order				= "Öncelik", // MaxLen 16 (with ':' + 'Cc/DB/TA')
+.dmr_beep				= "DMR beep", // MaxLen 16 (with ':' + .star/.stop/.both/.none)
+.start					= "Start", // MaxLen 16 (with ':' + .dmr_beep)
+.both					= "Both", // MaxLen 16 (with ':' + .dmr_beep)
+.vox_threshold                          = "VOX Thres.", // MaxLen 16 (with ':' + .off or 1..30)
+.vox_tail                               = "VOX Tail" // MaxLen 16 (with ':' + .n_a or '0.0s')
 };
 /********************************************************************
  *

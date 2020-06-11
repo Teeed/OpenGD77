@@ -8,7 +8,9 @@
 #include "fsl_device_registers.h"
 #include "clock_config.h"
 #include "board.h"
+#if defined(USE_SEGGER_RTT)
 #include <SeggerRTT/RTT/SEGGER_RTT.h>
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,7 +23,7 @@
 #include "fsl_common.h"
 #include "pin_mux.h"
 
-#include "fw_usb_com.h"
+#include <usb_com.h>
 
 /*******************************************************************************
 * Definitions
@@ -435,7 +437,9 @@ void USB_DeviceApplicationInit(void)
 
     if (kStatus_USB_Success != USB_DeviceClassInit(CONTROLLER_ID, &s_cdcAcmConfigList, &s_cdcVcom.deviceHandle))
     {
+#if defined(USE_SEGGER_RTT)
     	SEGGER_RTT_printf(0, "USB device init failed\r\n");
+#endif
 //        usb_echo("USB device init failed\r\n");
     }
     else

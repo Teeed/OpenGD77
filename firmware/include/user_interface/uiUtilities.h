@@ -18,14 +18,17 @@
 #ifndef _MENU_UTILITY_QSO_DATA_H_
 #define _MENU_UTILITY_QSO_DATA_H_                    /**< Symbol preventing repeated inclusion */
 #include <user_interface/menuSystem.h>
-#include <functions/fw_settings.h>
-#include "fw_common.h"
+#include <functions/settings.h>
+#include "common.h"
 
+#define MAX_ZONE_SCAN_NUISANCE_CHANNELS 16
 #define NUM_LASTHEARD_STORED 32
 extern const int QSO_TIMER_TIMEOUT;
 extern const int TX_TIMER_Y_OFFSET;
 extern const int CONTACT_Y_POS;
 extern const int FREQUENCY_X_POS;
+extern struct_codeplugRxGroup_t currentRxGroupData;
+extern struct_codeplugContact_t currentContactData;
 
 enum UI_CALL_STATE { NOT_IN_CALL=0, PRIVATE_CALL_ACCEPT, PRIVATE_CALL, PRIVATE_CALL_DECLINED };
 
@@ -68,9 +71,30 @@ enum QSO_DISPLAY_STATE
 	QSO_DISPLAY_CALLER_DATA_UPDATE
 };
 
+typedef enum
+{
+	SCAN_SCANNING = 0,
+	SCAN_SHORT_PAUSED,
+	SCAN_PAUSED
+} ScanState_t;
+
 extern const int MAX_POWER_SETTING_NUM;
 extern const char *POWER_LEVELS[];
 extern const char *DMR_FILTER_LEVELS[];
+extern const char *ANALOG_FILTER_LEVELS[];
+extern const int SCAN_SHORT_PAUSE_TIME;			//time to wait after carrier detected to allow time for full signal detection. (CTCSS or DMR)
+extern const int SCAN_TOTAL_INTERVAL;			    //time between each scan step
+extern const int SCAN_DMR_SIMPLEX_MIN_INTERVAL;		//minimum time between steps when scanning DMR Simplex. (needs extra time to capture TDMA Pulsing)
+extern const int SCAN_FREQ_CHANGE_SETTLING_INTERVAL;//Time after frequency is changed before RSSI sampling starts
+extern const int SCAN_SKIP_CHANNEL_INTERVAL;		//This is actually just an implicit flag value to indicate the channel should be skipped
+extern ScanState_t scanState;
+extern int scanTimer;
+extern bool scanActive;
+extern bool toneScanActive;
+extern bool displaySquelch;
+extern int scanDirection;
+
+
 extern LinkItem_t *LinkHead;
 extern int menuDisplayQSODataState;
 extern int qsodata_timer;
@@ -78,7 +102,12 @@ extern uint32_t menuUtilityReceivedPcId;
 extern uint32_t menuUtilityTgBeforePcMode;
 extern const uint32_t RSSI_UPDATE_COUNTER_RELOAD;
 extern settingsStruct_t originalNonVolatileSettings; // used to store previous settings in options edition related menus.
+extern int nuisanceDelete[MAX_ZONE_SCAN_NUISANCE_CHANNELS];
+extern int nuisanceDeleteIndex;
+extern char freq_enter_digits[12];
+extern int freq_enter_idx;
 
+bool isQSODataAvailableForCurrentTalker(void);
 char *chomp(char *str);
 int32_t getFirstSpacePos(char *str);
 void dmrIDCacheInit(void);
@@ -91,9 +120,14 @@ void lastheardInitList(void);
 bool lastHeardListUpdate(uint8_t *dmrDataBuffer, bool forceOnHotspot);
 void lastHeardClearLastID(void);
 void drawRSSIBarGraph(void);
+void drawFMMicLevelBarGraph(void);
 void drawDMRMicLevelBarGraph(void);
 void setOverrideTGorPC(int tgOrPc, bool privateCall);
-void printFrequency(bool isTX, bool hasFocus, uint8_t y, uint32_t frequency, bool displayVFOChannel);
+void printFrequency(bool isTX, bool hasFocus, uint8_t y, uint32_t frequency, bool displayVFOChannel,bool isScanMode);
 void printToneAndSquelch(void);
+void reset_freq_enter_digits(void);
+int read_freq_enter_digits(int startDigit, int endDigit);
+int getBatteryPercentage(void);
+
 
 #endif

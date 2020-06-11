@@ -33,9 +33,6 @@ Further development by Roger VK3KYY, latterly assisted by Daniel F1RMB, Alex DL4
 
 Current lead developer and source code gatekeeper is Roger VK3KYY
 
-# Licensing disclaimer
-The AMBE codec used by DMR is not open source. This firmware uses binary sections from the official firmware for the AMBE encoding and decoding functions. However all other parts of the code are open source
-
 # License
 This software is licenced under the GPL v2 and is intended for Amateur Radio and educational use only.
 

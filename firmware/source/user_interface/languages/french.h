@@ -46,6 +46,7 @@ const stringsTable_t frenchLanguage =
 .last_heard				= "Derniers reçus",
 .options				= "Options",
 .display_options		= "Options aff.",
+.sound_options				= "Options son", // MaxLen: 16
 .channel_details		= "Détails canal",
 .new_contact			= "Nouv. contact",
 .new_channel			= "New channel", // MaxLen: 16, leave room for a space and four channel digits after
@@ -110,6 +111,7 @@ const stringsTable_t frenchLanguage =
 .band_limits			= "Lim. Bandes",
 .beep_volume			= "Vol. bip",
 .dmr_mic_gain			= "DMR mic",
+.fm_mic_gain				= "FM mic", // MaxLen: 16 (with ':' + 0..31)
 .key_long				= "Appui long",
 .key_repeat				= "Répét°",
 .dmr_filter_timeout		= "Tps filtre",
@@ -136,7 +138,7 @@ const stringsTable_t frenchLanguage =
 .delete_contact				= "Efface Contact",
 .group_call				= "Appel de Groupe",
 .all_call				= "All Call",
-.tone_scan				= "Scan tonalités",
+.tone_scan				= "Scan tons",
 .cc_scan				= "Scan CC",
 .low_battery			        = "BATT. FAIBLE !!!",//// MaxLen: 16
 .Auto					= "Auto", // MaxLen 16 (with .mode + ':') 
@@ -147,6 +149,11 @@ const stringsTable_t frenchLanguage =
 .one_line				= "1 ligne", // MaxLen 16 (with ':' + .contact)
 .two_lines				= "2 lignes", // MaxLen 16 (with ':' + .contact)
 .priority_order				= "Ordre", // MaxLen 16 (with ':' + 'Cc/DB/TA')
+.dmr_beep				= "Bip TX", // MaxLen 16 (with ':' + .star/.stop/.both/.none)
+.start					= "Début", // MaxLen 16 (with ':' + .dmr_beep)
+.both					= "Les Deux", // MaxLen 16 (with ':' + .dmr_beep)
+.vox_threshold                          = "Seuil VOX", // MaxLen 16 (with ':' + .off or 1..30)
+.vox_tail                               = "Queue VOX" // MaxLen 16 (with ':' + .n_a or '0.0s')
 };
 /********************************************************************
  *

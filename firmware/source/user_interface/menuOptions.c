@@ -15,20 +15,20 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
+#include <settings.h>
 #include <user_interface/menuSystem.h>
 #include <user_interface/uiLocalisation.h>
-#include <functions/fw_settings.h>
-#include <interfaces/fw_wdog.h>
 #include <user_interface/uiUtilities.h>
+#include <wdog.h>
 
 static void updateScreen(void);
 static void handleEvent(uiEvent_t *ev);
 static bool	doFactoryReset;
-enum OPTIONS_MENU_LIST { OPTIONS_MENU_TIMEOUT_BEEP=0,OPTIONS_MENU_FACTORY_RESET,OPTIONS_MENU_USE_CALIBRATION,
-							OPTIONS_MENU_TX_FREQ_LIMITS,OPTIONS_MENU_BEEP_VOLUME,OPTIONS_MIC_GAIN_DMR,
+enum OPTIONS_MENU_LIST { OPTIONS_MENU_FACTORY_RESET = 0, OPTIONS_MENU_USE_CALIBRATION,
+							OPTIONS_MENU_TX_FREQ_LIMITS,
 							OPTIONS_MENU_KEYPAD_TIMER_LONG, OPTIONS_MENU_KEYPAD_TIMER_REPEAT, OPTIONS_MENU_DMR_MONITOR_CAPTURE_TIMEOUT,
-							OPTIONS_MENU_SCAN_DELAY,OPTIONS_MENU_SCAN_MODE,
-							OPTIONS_MENU_SQUELCH_DEFAULT_VHF,OPTIONS_MENU_SQUELCH_DEFAULT_220MHz,OPTIONS_MENU_SQUELCH_DEFAULT_UHF,
+							OPTIONS_MENU_SCAN_DELAY, OPTIONS_MENU_SCAN_MODE,
+							OPTIONS_MENU_SQUELCH_DEFAULT_VHF, OPTIONS_MENU_SQUELCH_DEFAULT_220MHz, OPTIONS_MENU_SQUELCH_DEFAULT_UHF,
 							OPTIONS_MENU_PTT_TOGGLE, OPTIONS_MENU_HOTSPOT_TYPE, OPTIONS_MENU_TALKER_ALIAS_TX,
 							OPTIONS_MENU_PRIVATE_CALLS,
 							NUM_OPTIONS_MENU_ITEMS};
@@ -67,16 +67,6 @@ static void updateScreen(void)
 
 		switch(mNum)
 		{
-			case OPTIONS_MENU_TIMEOUT_BEEP:
-				if (nonVolatileSettings.txTimeoutBeepX5Secs != 0)
-				{
-					snprintf(buf, bufferLen, "%s:%d", currentLanguage->timeout_beep, nonVolatileSettings.txTimeoutBeepX5Secs * 5);
-				}
-				else
-				{
-					snprintf(buf, bufferLen, "%s:%s", currentLanguage->timeout_beep, currentLanguage->off);
-				}
-				break;
 			case OPTIONS_MENU_FACTORY_RESET:
 				if (doFactoryReset == true)
 				{
@@ -106,13 +96,6 @@ static void updateScreen(void)
 				{
 					snprintf(buf, bufferLen, "%s:%s", currentLanguage->band_limits, currentLanguage->off);
 				}
-				break;
-			case OPTIONS_MENU_BEEP_VOLUME:// Beep volume reduction
-				snprintf(buf, bufferLen, "%s:%ddB", currentLanguage->beep_volume, (2 - nonVolatileSettings.beepVolumeDivider) * 3);
-				soundBeepVolumeDivider = nonVolatileSettings.beepVolumeDivider;
-				break;
-			case OPTIONS_MIC_GAIN_DMR:// DMR Mic gain
-				snprintf(buf, bufferLen, "%s:%ddB", currentLanguage->dmr_mic_gain, (nonVolatileSettings.micGainDMR - 11) * 3);
 				break;
 			case OPTIONS_MENU_KEYPAD_TIMER_LONG:// Timer longpress
 				snprintf(buf, bufferLen, "%s:%1d.%1ds", currentLanguage->key_long, nonVolatileSettings.keypadTimerLong / 10, nonVolatileSettings.keypadTimerLong % 10);
@@ -168,6 +151,8 @@ static void updateScreen(void)
 
 static void handleEvent(uiEvent_t *ev)
 {
+	displayLightTrigger();
+
 	if (KEYCHECK_PRESS(ev->keys,KEY_DOWN) && gMenusEndIndex!=0)
 	{
 		MENU_INC(gMenusCurrentItemIndex, NUM_OPTIONS_MENU_ITEMS);
@@ -180,54 +165,35 @@ static void handleEvent(uiEvent_t *ev)
 	{
 		switch(gMenusCurrentItemIndex)
 		{
-			case OPTIONS_MENU_TIMEOUT_BEEP:
-				if (nonVolatileSettings.txTimeoutBeepX5Secs < 4)
-				{
-					nonVolatileSettings.txTimeoutBeepX5Secs++;
-				}
-				break;
 			case OPTIONS_MENU_FACTORY_RESET:
 				doFactoryReset = true;
 				break;
 			case OPTIONS_MENU_USE_CALIBRATION:
-				nonVolatileSettings.useCalibration=true;
+				nonVolatileSettings.useCalibration = true;
 				break;
 			case OPTIONS_MENU_TX_FREQ_LIMITS:
-				nonVolatileSettings.txFreqLimited=true;
-				break;
-			case OPTIONS_MENU_BEEP_VOLUME:
-				if (nonVolatileSettings.beepVolumeDivider>0)
-				{
-					nonVolatileSettings.beepVolumeDivider--;
-				}
-				break;
-			case OPTIONS_MIC_GAIN_DMR:// DMR Mic gain
-				if (nonVolatileSettings.micGainDMR<15 )
-				{
-					nonVolatileSettings.micGainDMR++;
-					setMicGainDMR(nonVolatileSettings.micGainDMR);
-				}
+				nonVolatileSettings.txFreqLimited = true;
 				break;
 			case OPTIONS_MENU_KEYPAD_TIMER_LONG:
-				if (nonVolatileSettings.keypadTimerLong<90)
+				if (nonVolatileSettings.keypadTimerLong < 90)
 				{
 					nonVolatileSettings.keypadTimerLong++;
 				}
 				break;
 			case OPTIONS_MENU_KEYPAD_TIMER_REPEAT:
-				if (nonVolatileSettings.keypadTimerRepeat<90)
+				if (nonVolatileSettings.keypadTimerRepeat < 90)
 				{
 					nonVolatileSettings.keypadTimerRepeat++;
 				}
 				break;
 			case OPTIONS_MENU_DMR_MONITOR_CAPTURE_TIMEOUT:
-				if (nonVolatileSettings.dmrCaptureTimeout<90)
+				if (nonVolatileSettings.dmrCaptureTimeout < 90)
 				{
 					nonVolatileSettings.dmrCaptureTimeout++;
 				}
 				break;
 			case OPTIONS_MENU_SCAN_DELAY:
-				if (nonVolatileSettings.scanDelay<30)
+				if (nonVolatileSettings.scanDelay < 30)
 				{
 					nonVolatileSettings.scanDelay++;
 				}
@@ -278,54 +244,35 @@ static void handleEvent(uiEvent_t *ev)
 
 		switch(gMenusCurrentItemIndex)
 		{
-			case OPTIONS_MENU_TIMEOUT_BEEP:
-				if (nonVolatileSettings.txTimeoutBeepX5Secs>0)
-				{
-					nonVolatileSettings.txTimeoutBeepX5Secs--;
-				}
-				break;
 			case OPTIONS_MENU_FACTORY_RESET:
 				doFactoryReset = false;
 				break;
 			case OPTIONS_MENU_USE_CALIBRATION:
-				nonVolatileSettings.useCalibration=false;
+				nonVolatileSettings.useCalibration = false;
 				break;
 			case OPTIONS_MENU_TX_FREQ_LIMITS:
-				nonVolatileSettings.txFreqLimited=false;
-				break;
-			case OPTIONS_MENU_BEEP_VOLUME:
-				if (nonVolatileSettings.beepVolumeDivider<10)
-				{
-					nonVolatileSettings.beepVolumeDivider++;
-				}
-				break;
-			case OPTIONS_MIC_GAIN_DMR:// DMR Mic gain
-				if (nonVolatileSettings.micGainDMR>0)
-				{
-					nonVolatileSettings.micGainDMR--;
-					setMicGainDMR(nonVolatileSettings.micGainDMR);
-				}
+				nonVolatileSettings.txFreqLimited = false;
 				break;
 			case OPTIONS_MENU_KEYPAD_TIMER_LONG:
-				if (nonVolatileSettings.keypadTimerLong>1)
+				if (nonVolatileSettings.keypadTimerLong > 1)
 				{
 					nonVolatileSettings.keypadTimerLong--;
 				}
 				break;
 			case OPTIONS_MENU_KEYPAD_TIMER_REPEAT:
-				if (nonVolatileSettings.keypadTimerRepeat>0)
+				if (nonVolatileSettings.keypadTimerRepeat > 1) // Don't set it to zero, otherwise watchdog may kicks in.
 				{
 					nonVolatileSettings.keypadTimerRepeat--;
 				}
 				break;
 			case OPTIONS_MENU_DMR_MONITOR_CAPTURE_TIMEOUT:
-				if (nonVolatileSettings.dmrCaptureTimeout>1)
+				if (nonVolatileSettings.dmrCaptureTimeout > 1)
 				{
 					nonVolatileSettings.dmrCaptureTimeout--;
 				}
 				break;
 			case OPTIONS_MENU_SCAN_DELAY:
-				if (nonVolatileSettings.scanDelay>1)
+				if (nonVolatileSettings.scanDelay > 1)
 				{
 					nonVolatileSettings.scanDelay--;
 				}
@@ -378,6 +325,7 @@ static void handleEvent(uiEvent_t *ev)
 			settingsRestoreDefaultSettings();
 			watchdogReboot();
 		}
+		SETTINGS_PLATFORM_SPECIFIC_SAVE_SETTINGS(false);// Some platform require the settings to be saved immediately
 		menuSystemPopAllAndDisplayRootMenu();
 		return;
 	}
@@ -385,8 +333,6 @@ static void handleEvent(uiEvent_t *ev)
 	{
 		// Restore original settings.
 		memcpy(&nonVolatileSettings, &originalNonVolatileSettings, sizeof(settingsStruct_t));
-		setMicGainDMR(nonVolatileSettings.micGainDMR);
-		soundBeepVolumeDivider = nonVolatileSettings.beepVolumeDivider;
 		menuSystemPopPreviousMenu();
 		return;
 	}

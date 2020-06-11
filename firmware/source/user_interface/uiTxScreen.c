@@ -15,11 +15,12 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
-#include <hardware/fw_HR-C6000.h>
+#include <HR-C6000.h>
+#include <settings.h>
+#include <sound.h>
 #include <user_interface/menuSystem.h>
 #include <user_interface/uiUtilities.h>
 #include <user_interface/uiLocalisation.h>
-#include "fw_settings.h"
 
 
 static void updateScreen(void);
@@ -37,7 +38,7 @@ int menuTxScreen(uiEvent_t *ev, bool isFirstRun)
 
 	if (isFirstRun)
 	{
-		uiChannelModeScanActive = false;
+		scanActive = false;
 		trxIsTransmittingTone = false;
 		settingsPrivateCallMuteMode = false;
 		isShowingLastHeard = false;
@@ -52,6 +53,8 @@ int menuTxScreen(uiEvent_t *ev, bool isFirstRun)
 
 			txstopdelay = 0;
 			clearIsWakingState();
+			if (trxGetMode() == RADIO_MODE_ANALOG)
+				trxSetTxCSS(currentChannelData->txTone);
 			trx_setTX();
 			updateScreen();
 		}
@@ -65,15 +68,18 @@ int menuTxScreen(uiEvent_t *ev, bool isFirstRun)
 			// But this would require some sort of timer callback system, which we don't currently have.
 			//
 			ucClearBuf();
-			ucDrawRoundRectWithDropShadow(4, 4, 120, 58, 5, true);
-			ucPrintCentered(4, currentLanguage->error, FONT_16x32);
+
+			ucDrawRoundRectWithDropShadow(4, 4, 120, (DISPLAY_SIZE_Y - 6), 5, true);
+			ucPrintCentered(4, currentLanguage->error, FONT_SIZE_4);
+
 			if ((currentChannelData->flag4 & 0x04) != 0x00)
 			{
-				ucPrintCentered(40, currentLanguage->rx_only, FONT_8x16);
+
+				ucPrintCentered((DISPLAY_SIZE_Y - 24), currentLanguage->rx_only, FONT_SIZE_3);
 			}
 			else
 			{
-				ucPrintCentered(40, currentLanguage->out_of_band, FONT_8x16);
+				ucPrintCentered((DISPLAY_SIZE_Y - 24), currentLanguage->out_of_band, FONT_SIZE_3);
 			}
 			ucRender();
 			displayLightOverrideTimeout(-1);
@@ -85,6 +91,11 @@ int menuTxScreen(uiEvent_t *ev, bool isFirstRun)
 	}
 	else
 	{
+
+#if defined(PLATFORM_GD77S)
+		heartBeatActivityForGD77S(ev);
+#endif
+
 		if (trxIsTransmitting && (getIsWakingState() == WAKING_MODE_NONE))
 		{
 			if (PITCounter >= nextSecondPIT)
@@ -108,11 +119,13 @@ int menuTxScreen(uiEvent_t *ev, bool isFirstRun)
 				if ((currentChannelData->tot != 0) && (timeInSeconds == 0))
 				{
 					set_melody(melody_tx_timeout_beep);
+
 					ucClearBuf();
-					ucPrintCentered(20, currentLanguage->timeout, FONT_16x32);
+					ucPrintCentered(20, currentLanguage->timeout, FONT_SIZE_4);
 					ucRender();
 					PTTToggledDown = false;
 					mto = ev->time;
+					voxReset();
 				}
 				else
 				{
@@ -126,15 +139,36 @@ int menuTxScreen(uiEvent_t *ev, bool isFirstRun)
 			}
 			else
 			{
-				if (trxGetMode() == RADIO_MODE_DIGITAL)
+				int mode = trxGetMode();
+
+				if (mode == RADIO_MODE_DIGITAL)
 				{
-					if ((ev->time - micm) > 100)
+					if ((nonVolatileSettings.beepOptions & BEEP_TX_START) &&
+							(slot_state == DMR_STATE_TX_START_1) && (melody_play == NULL))
 					{
-						drawDMRMicLevelBarGraph();
-						ucRenderRows(1,2);
-						micm = ev->time;
+						// If VOX is running, don't send a beep as it will reset its the trigger status.
+						if ((voxIsEnabled() == false) || (voxIsEnabled() && (voxIsTriggered() == false)))
+						{
+							set_melody(melody_dmr_tx_start_beep);
+						}
 					}
 				}
+
+				if ((ev->time - micm) > 100)
+				{
+					if (mode == RADIO_MODE_DIGITAL)
+					{
+						drawDMRMicLevelBarGraph();
+					}
+					else
+					{
+						drawFMMicLevelBarGraph();
+					}
+
+					ucRenderRows(1,2);
+					micm = ev->time;
+				}
+
 			}
 		}
 
@@ -163,14 +197,14 @@ int menuTxScreen(uiEvent_t *ev, bool isFirstRun)
 static void updateScreen(void)
 {
 	menuDisplayQSODataState = QSO_DISPLAY_DEFAULT_SCREEN;
-	if (menuControlData.stack[0] == MENU_VFO_MODE)
+	if (menuControlData.stack[0] == UI_VFO_MODE)
 	{
-		menuVFOModeUpdateScreen(timeInSeconds);
+		uiVFOModeUpdateScreen(timeInSeconds);
 		displayLightOverrideTimeout(-1);
 	}
 	else
 	{
-		menuChannelModeUpdateScreen(timeInSeconds);
+		uiChannelModeUpdateScreen(timeInSeconds);
 		displayLightOverrideTimeout(-1);
 	}
 }
@@ -193,6 +227,7 @@ static void handleEvent(uiEvent_t *ev)
 
 				// Need to wrap this in Task Critical to avoid bus contention on the I2C bus.
 				taskENTER_CRITICAL();
+				trxSetRxCSS(currentChannelData->rxTone);
 				trxActivateRx();
 				taskEXIT_CRITICAL();
 				menuSystemPopPreviousMenu();
@@ -213,7 +248,19 @@ static void handleEvent(uiEvent_t *ev)
 			// In DMR mode, wait for the DMR system to finish before exiting
 			if (slot_state < DMR_STATE_TX_START_1)
 			{
+				if ((nonVolatileSettings.beepOptions & BEEP_TX_STOP) && (melody_play == NULL))
+				{
+					set_melody(melody_dmr_tx_stop_beep);
+				}
+
 				GPIO_PinWrite(GPIO_LEDred, Pin_LEDred, 0);
+
+				// If there is a signal, lit the Green LED
+				if ((GPIO_PinRead(GPIO_LEDgreen, Pin_LEDgreen) == 0) && (trxCarrierDetected() || (getAudioAmpStatus() & AUDIO_AMP_MODE_RF)))
+				{
+					GPIO_PinWrite(GPIO_LEDgreen, Pin_LEDgreen, 1);
+				}
+
 				menuSystemPopPreviousMenu();
 			}
 		}
@@ -230,7 +277,7 @@ static void handleEvent(uiEvent_t *ev)
 				trxIsTransmittingTone = true;
 				trxSetTone1(1750);
 				trxSelectVoiceChannel(AT1846_VOICE_CHANNEL_TONE1);
-				GPIO_PinWrite(GPIO_audio_amp_enable, Pin_audio_amp_enable, 1);
+				enableAudioAmp(AUDIO_AMP_MODE_RF);
 				GPIO_PinWrite(GPIO_RX_audio_mux, Pin_RX_audio_mux, 1);
 			}
 			else
@@ -242,7 +289,7 @@ static void handleEvent(uiEvent_t *ev)
 					trxSetDTMF(keyval);
 					trxIsTransmittingTone = true;
 					trxSelectVoiceChannel(AT1846_VOICE_CHANNEL_DTMF);
-					GPIO_PinWrite(GPIO_audio_amp_enable, Pin_audio_amp_enable, 1);
+					enableAudioAmp(AUDIO_AMP_MODE_RF);
 					GPIO_PinWrite(GPIO_RX_audio_mux, Pin_RX_audio_mux, 1);
 				}
 			}
@@ -254,7 +301,7 @@ static void handleEvent(uiEvent_t *ev)
 	{
 		trxIsTransmittingTone = false;
 		trxSelectVoiceChannel(AT1846_VOICE_CHANNEL_MIC);
-		GPIO_PinWrite(GPIO_audio_amp_enable, Pin_audio_amp_enable, 0);
+		disableAudioAmp(AUDIO_AMP_MODE_RF);
 	}
 
 	if (trxGetMode() == RADIO_MODE_DIGITAL && (ev->buttons & BUTTON_SK1) && isShowingLastHeard==false && trxIsTransmitting==true)
