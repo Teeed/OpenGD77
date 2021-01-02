@@ -32,12 +32,10 @@
 #include "virtual_com.h"
 #include "usb_com.h"
 
-#include "common.h"
 #include "buttons.h"
 #include "LEDs.h"
 #include "keyboard.h"
 #include "rotary_switch.h"
-#include "speech_synthesis.h"
 #include "display.h"
 #include "vox.h"
 

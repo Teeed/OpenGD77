@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Copyright (C) 2019  F1RMB, Daniel Caujolle-Bert <f1rmb.daniel@gmail.com>
@@ -19,17 +19,11 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 
-
-You need to install future if you're running python2: 
-    debian like: sudo apt-get install python-future
-    or: pip install future
-   
-You also need python-serial or python3-serial
+You also need python3-serial
 
 On windows install pyserial, pillow and cimage (using pip install ...)
 
-""" 	
-from __future__ import print_function
+"""
 from datetime import datetime
 import time
 import os.path
@@ -90,23 +84,14 @@ def sendAndReceiveCommand(ser):
         
         readbuffer = ser.read(ser.in_waiting)
     
-        if (sys.version_info > (3, 0)):
-            header = ord('R')
-        else:
-            header = 'R'
+        header = ord('R')
             
         if (readbuffer[0] == header):
 
-            if (sys.version_info > (3, 0)):
-                l = (readbuffer[1] << 8) + (readbuffer[2] << 0)
-            else:
-                l = (ord(readbuffer[1]) << 8) + (ord(readbuffer[2]) << 0)
+            l = (readbuffer[1] << 8) + (readbuffer[2] << 0)
 
             for i in range(0, l):
-                if (sys.version_info > (3, 0)):
-                    imgBuffer[currentDataAddressInLocalBuffer] = readbuffer[i + 3]
-                else:
-                    imgBuffer[currentDataAddressInLocalBuffer] = ord(readbuffer[i + 3])
+                imgBuffer[currentDataAddressInLocalBuffer] = readbuffer[i + 3]
 
                 currentDataAddressInLocalBuffer += 1
     
@@ -144,7 +129,7 @@ def saveImage(filename, scale, foreground, background):
     if (scale == 1):
         img.save(filename + '.png')
     else:
-        rimg = img.resize((128 * scale, 64 * scale))
+        rimg = img.resize((128 * scale, 64 * scale), resample=Image.NEAREST)
         rimg.save(filename + '.png')
 
 

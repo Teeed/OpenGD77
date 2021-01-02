@@ -18,30 +18,36 @@
 #include <settings.h>
 #include <user_interface/menuSystem.h>
 #include <user_interface/uiLocalisation.h>
-
+#include <user_interface/uiUtilities.h>
 
 static void updateScreen(void);
 static void handleEvent(uiEvent_t *ev);
+static menuStatus_t menuLanguageExitCode = MENU_STATUS_SUCCESS;
 
-
-int menuLanguage(uiEvent_t *ev, bool isFirstRun)
+menuStatus_t menuLanguage(uiEvent_t *ev, bool isFirstRun)
 {
 	if (isFirstRun)
 	{
 		updateScreen();
+		return (MENU_STATUS_LIST_TYPE | MENU_STATUS_SUCCESS);
 	}
 	else
 	{
+		menuLanguageExitCode = MENU_STATUS_SUCCESS;
+
 		if (ev->hasEvent)
+		{
 			handleEvent(ev);
+		}
 	}
-	return 0;
+	return menuLanguageExitCode;
 }
 
 static void updateScreen(void)
 {
 	int mNum = 0;
 	//stringsTable_t *lang;
+
 	ucClearBuf();
 	menuDisplayTitle("Language");
 
@@ -50,6 +56,13 @@ static void updateScreen(void)
 	{
 		mNum = menuGetMenuOffset(NUM_LANGUAGES, i);
 		menuDisplayEntry(i, mNum, (char *)languages[mNum].LANGUAGE_NAME);
+
+		if (i == 0)
+		{
+			voicePromptsInit();
+			voicePromptsAppendString((char *)languages[mNum].LANGUAGE_NAME);
+			voicePromptsPlay();
+		}
 	}
 
 	ucRender();
@@ -60,26 +73,36 @@ static void handleEvent(uiEvent_t *ev)
 {
 	displayLightTrigger();
 
-	if (KEYCHECK_PRESS(ev->keys,KEY_DOWN) && gMenusEndIndex!=0)
+	if (ev->events & BUTTON_EVENT)
 	{
-		MENU_INC(gMenusCurrentItemIndex, NUM_LANGUAGES);
-		updateScreen();
+		if (repeatVoicePromptOnSK1(ev))
+		{
+			return;
+		}
 	}
-	else if (KEYCHECK_PRESS(ev->keys,KEY_UP))
+
+	if (KEYCHECK_PRESS(ev->keys, KEY_DOWN) && (gMenusEndIndex != 0))
 	{
-		MENU_DEC(gMenusCurrentItemIndex, NUM_LANGUAGES);
+		menuSystemMenuIncrement(&gMenusCurrentItemIndex, NUM_LANGUAGES);
 		updateScreen();
+		menuLanguageExitCode |= MENU_STATUS_LIST_TYPE;
 	}
-	else if (KEYCHECK_SHORTUP(ev->keys,KEY_GREEN))
+	else if (KEYCHECK_PRESS(ev->keys, KEY_UP))
 	{
-		nonVolatileSettings.languageIndex = gMenusCurrentItemIndex;
+		menuSystemMenuDecrement(&gMenusCurrentItemIndex, NUM_LANGUAGES);
+		updateScreen();
+		menuLanguageExitCode |= MENU_STATUS_LIST_TYPE;
+	}
+	else if (KEYCHECK_SHORTUP(ev->keys, KEY_GREEN))
+	{
+		settingsSet(nonVolatileSettings.languageIndex, gMenusCurrentItemIndex);
 		currentLanguage = &languages[gMenusCurrentItemIndex];
+		settingsSaveIfNeeded(true);
 		menuSystemLanguageHasChanged();
-		SETTINGS_PLATFORM_SPECIFIC_SAVE_SETTINGS(false);// Some platform require the settings to be saved immediately
 		menuSystemPopAllAndDisplayRootMenu();
 		return;
 	}
-	else if (KEYCHECK_SHORTUP(ev->keys,KEY_RED))
+	else if (KEYCHECK_SHORTUP(ev->keys, KEY_RED))
 	{
 		menuSystemPopPreviousMenu();
 		return;

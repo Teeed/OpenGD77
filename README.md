@@ -1,4 +1,9 @@
 # OpenGD77
+Firmware for DMR transceivers using the NXP MK22 MCU, AT1846S RF chip and HR-C6000 DMR chipset. Including the Radioddiy GD-77, Baofeng DM-1801 and Baofeng RD-5R.
+
+
+Note.
+The AMBE codec is not open source because of potential copyright problems, and instead uses binary sections from original manufacturer’s firmware.
 [![Build Status](https://drone.teeed.eu/api/badges/Teeed/OpenGD77/status.svg)](https://drone.teeed.eu/Teeed/OpenGD77)
 
 Open source firmware for the Radioddity GD-77 dual band DMR / FM handheld transceiever, for Amateur Radio use.
@@ -18,23 +23,19 @@ However it does currently support some core functionality that the official firm
 
 Not all functionality provided in the official firmware is likely ever to be part of this firmware, because some features like encryption are explicitly prohibited for Amateur Radio operators.
 
-Some functionality like Dual Watch may also not ever be implemented, because its equivalent to the Channel / Zone scan function.
+Some functionality like Dual Watch may also not ever be implemented, because it is equivalent to the Channel / Zone scan function.
 
-
-
-The project is under active development by several developers. 
-New developers are welcome to participate, but currently the focus is still on getting the core functionality working and existing bugs fixed.
-This does not mean that new non-core functionality changes will be rejected, but bug fixes and core functionality PR's  will take priority
-
-
+The project is under active development by several developers.
+This does not mean that new non-core functionality changes will be rejected, but bug fixes and core functionality PR’s will take priority.
 # Credits
 Originally conceived by Kai DG4KLU.
 Further development by Roger VK3KYY, latterly assisted by Daniel F1RMB, Alex DL4LEX, Colin G4EML and others.
 
 Current lead developer and source code gatekeeper is Roger VK3KYY
 
+
 # License
-This software is licenced under the GPL v2 and is intended for Amateur Radio and educational use only.
+This software is licensed under the GPL v2 and is intended for Amateur Radio and educational use only.
 
 Use of this software for commercial purposes is strictly forbidden.
 

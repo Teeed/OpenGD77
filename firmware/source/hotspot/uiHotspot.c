@@ -125,7 +125,7 @@ M: 2020-01-07 09:52:15.246 DMR Slot 2, received network end of voice transmissio
 
 #define MMDVM_HEADER_LENGTH 4U
 
-#define HOTSPOT_VERSION_STRING "OpenGD77_HS v0.1.3"
+#define HOTSPOT_VERSION_STRING "OpenGD77_HS v0.1.4"
 #define concat(a, b) a " GitID #" b ""
 static const char HARDWARE[] = concat(HOTSPOT_VERSION_STRING, GITVERSION);
 
@@ -294,6 +294,7 @@ static const struct
 		{',', 0xEEAEE000U, 22U},
 		{'-', 0xEAAE0000U, 18U},
 		{'=', 0xEAB80000U, 16U},
+		{'.', 0xBAEB8000U, 20U},
 		{' ', 0x00000000U, 4U},
 		{0U,  0x00000000U, 0U}
 };
@@ -310,7 +311,8 @@ static uint8_t cwBuffer[64U];
 static uint16_t cwpoLen;
 static uint16_t cwpoPtr;
 static bool cwKeying = false;
-static uint8_t savedDMRFilterLevel = 0xFF; // 0xFF value means unset
+static uint8_t savedDMRDestinationFilter = 0xFF; // 0xFF value means unset
+static uint8_t savedDMRCcTsFilter = 0xFF; // 0xFF value means unset
 
 // End of CWID related
 
@@ -321,7 +323,6 @@ static void hotspotExit(void);
 static void hotspotStateMachine(void);
 static void processUSBDataQueue(void);
 static void handleHotspotRequest(void);
-static void disableTransmission(void);
 static void cwReset(void);
 static void cwProcess(void);
 
@@ -334,17 +335,19 @@ static void sendDebug5(const char *text, int16_t n1, int16_t n2, int16_t n3, int
 #endif
 
 
-int menuHotspotMode(uiEvent_t *ev, bool isFirstRun)
+menuStatus_t menuHotspotMode(uiEvent_t *ev, bool isFirstRun)
 {
 	if (isFirstRun)
 	{
 		// DMR filter level isn't saved yet (cycling power OFF/ON quickly can corrupt
 		// this value otherwise, as menuHotspotMode(true) could be called twice.
-		if (savedDMRFilterLevel == 0xFF)
+		if (savedDMRDestinationFilter == 0xFF)
 		{
 			// Override DMR filtering
-			savedDMRFilterLevel = nonVolatileSettings.dmrFilterLevel;
-			nonVolatileSettings.dmrFilterLevel = DMR_FILTER_CC_TS;
+			savedDMRDestinationFilter = nonVolatileSettings.dmrDestinationFilter;
+			savedDMRCcTsFilter = nonVolatileSettings.dmrCcTsFilter;
+			settingsSet(nonVolatileSettings.dmrDestinationFilter, DMR_DESTINATION_FILTER_NONE);
+			settingsSet(nonVolatileSettings.dmrCcTsFilter, DMR_CCTS_FILTER_CC_TS);
 		}
 
 		hotspotState = HOTSPOT_STATE_NOT_CONNECTED;
@@ -434,7 +437,7 @@ int menuHotspotMode(uiEvent_t *ev, bool isFirstRun)
 		{
 			if (handleEvent(ev) == false)
 			{
-				return 0;
+				return MENU_STATUS_SUCCESS;
 			}
 		}
 	}
@@ -456,15 +459,18 @@ int menuHotspotMode(uiEvent_t *ev, bool isFirstRun)
 		}
 	}
 
-	return 0;
+	return MENU_STATUS_SUCCESS;
 }
 
 void menuHotspotRestoreSettings(void)
 {
-	if (savedDMRFilterLevel != 0xFF)
+	if (savedDMRDestinationFilter != 0xFF)
 	{
-		nonVolatileSettings.dmrFilterLevel = savedDMRFilterLevel;
-		savedDMRFilterLevel = 0xFF; // Unset saved DMR filter level
+		settingsSet(nonVolatileSettings.dmrDestinationFilter, savedDMRDestinationFilter);
+		savedDMRDestinationFilter = 0xFF; // Unset saved DMR destination filter level
+
+		settingsSet(nonVolatileSettings.dmrCcTsFilter, savedDMRCcTsFilter);
+		savedDMRCcTsFilter = 0xFF; // Unset saved CC TS filter level
 	}
 }
 
@@ -557,7 +563,7 @@ static void updateScreen(uint8_t rxCommandState)
 
 	ucPrintAt(DISPLAY_SIZE_X - (strlen(buffer) * 6) - 4, 4, buffer, FONT_SIZE_1);
 
-	if (trxIsTransmitting)
+	if (trxTransmissionEnabled)
 	{
 		if (displayFWVersion)
 		{
@@ -668,7 +674,8 @@ static void updateScreen(uint8_t rxCommandState)
 
 			ucPrintCore(0, 32, buffer, FONT_SIZE_3, TEXT_ALIGN_LEFT, false);
 
-			ucPrintCore(0, 32, (char *)POWER_LEVELS[hotspotPowerLevel], FONT_SIZE_3, TEXT_ALIGN_RIGHT, false);
+			sprintf(buffer,"%s%s",POWER_LEVELS[hotspotPowerLevel],POWER_LEVEL_UNITS[hotspotPowerLevel]);
+			ucPrintCore(0, 32, buffer, FONT_SIZE_3, TEXT_ALIGN_RIGHT, false);
 		}
 		val_before_dp = freq_rx / 100000;
 		val_after_dp = freq_rx - val_before_dp * 100000;
@@ -729,9 +736,9 @@ static bool handleEvent(uiEvent_t *ev)
 static void hotspotExit(void)
 {
 	disableTransmission();
-	if (trxIsTransmitting)
+	if (trxTransmissionEnabled)
 	{
-		trxIsTransmitting = false;
+		trxTransmissionEnabled = false;
 		trx_setRX();
 
 		GPIO_PinWrite(GPIO_LEDgreen, Pin_LEDgreen, 0);
@@ -817,26 +824,6 @@ static void processUSBDataQueue(void)
 			}
 		}
 	}
-}
-
-static void enableTransmission(void)
-{
-	GPIO_PinWrite(GPIO_LEDgreen, Pin_LEDgreen, 0);
-	GPIO_PinWrite(GPIO_LEDred, Pin_LEDred, 1);
-
-	txstopdelay=0;
-	trx_setTX();
-}
-
-static void disableTransmission(void)
-{
-	GPIO_PinWrite(GPIO_LEDred, Pin_LEDred, 0);
-	// Need to wrap this in Task Critical to avoid bus contention on the I2C bus.
-	taskENTER_CRITICAL();
-	trxActivateRx();
-	taskEXIT_CRITICAL();
-	//trxSetFrequency(freq_rx,freq_tx);
-
 }
 
 static void swapWithFakeTA(uint8_t *lc)
@@ -1405,9 +1392,9 @@ static void hotspotStateMachine(void)
 			lastRxState = HOTSPOT_RX_UNKNOWN;
 
 			// force immediate shutdown of Tx if we get here and the tx is on for some reason.
-			if (trxIsTransmitting)
+			if (trxTransmissionEnabled)
 			{
-				trxIsTransmitting = false;
+				trxTransmissionEnabled = false;
 				disableTransmission();
 			}
 
@@ -1442,9 +1429,9 @@ static void hotspotStateMachine(void)
 
 		case HOTSPOT_STATE_RX_START:
 			// force immediate shutdown of Tx if we get here and the tx is on for some reason.
-			if (trxIsTransmitting)
+			if (trxTransmissionEnabled)
 			{
-				trxIsTransmitting = false;
+				trxTransmissionEnabled = false;
 				disableTransmission();
 			}
 
@@ -1478,9 +1465,9 @@ static void hotspotStateMachine(void)
 				rfFrameBufCount = 0;
 				wavbuffer_count = 0;
 
-				if (trxIsTransmitting)
+				if (trxTransmissionEnabled)
 				{
-					trxIsTransmitting = false;
+					trxTransmissionEnabled = false;
 					disableTransmission();
 				}
 
@@ -1635,7 +1622,7 @@ static void hotspotStateMachine(void)
 			if (wavbuffer_count == 0 || modemState == STATE_IDLE)
 			{
 				hotspotState = HOTSPOT_STATE_TX_SHUTDOWN;
-				trxIsTransmitting = false;
+				trxTransmissionEnabled = false;
 			}
 			break;
 
@@ -1654,8 +1641,8 @@ static void hotspotStateMachine(void)
 			}
 			else
 			{
-				if ((slot_state < DMR_STATE_TX_START_1) ||
-						((modemState == STATE_IDLE) && trxIsTransmitting)) // MMDVMHost asked to go back to IDLE (mostly on shutdown)
+				if ((trxIsTransmitting) ||
+						((modemState == STATE_IDLE) && trxTransmissionEnabled)) // MMDVMHost asked to go back to IDLE (mostly on shutdown)
 				{
 					disableTransmission();
 					hotspotState = HOTSPOT_STATE_RX_START;
@@ -1943,13 +1930,17 @@ static void getVersion(void)
 			"GD-77S"
 #elif defined(PLATFORM_DM1801)
 			"DM-1801"
+#elif defined(PLATFORM_RD5R)
+			"RD-5R"
 #else
 			"Unknown"
 #endif
 			,(nonVolatileSettings.hotspotType == HOTSPOT_TYPE_MMDVM ? "MMDVM" : "BlueDV"));
 
 	for (uint8_t i = 0U; buffer[i] != 0x00U; i++, count++)
+	{
 		buf[count] = buffer[i];
+	}
 
 	buf[1U] = count;
 
@@ -2106,7 +2097,9 @@ static uint8_t setQSOInfo(volatile const uint8_t *data, uint8_t length)
 static void cwProcess(void)
 {
 	if (cwpoLen == 0U)
+	{
 		return;
+	}
 
 	if (PITCounter > cwNextPeriod)
 	{
@@ -2413,7 +2406,7 @@ static void handleHotspotRequest(void)
 
 	if (cwKeying)
 	{
-		if (!trxIsTransmitting)
+		if (!trxTransmissionEnabled)
 		{
 			// Start TX CWID, prepare for ANALOG
 			if (trxGetMode() != RADIO_MODE_ANALOG)
@@ -2437,10 +2430,10 @@ static void handleHotspotRequest(void)
 		{
 			disableTransmission();
 
-			if (trxIsTransmitting)
+			if (trxTransmissionEnabled)
 			{
 				// Stop TXing;
-				trxIsTransmitting = false;
+				trxTransmissionEnabled = false;
 				trx_setRX();
 				GPIO_PinWrite(GPIO_LEDgreen, Pin_LEDgreen, 0);
 

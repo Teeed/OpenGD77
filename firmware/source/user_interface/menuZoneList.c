@@ -19,28 +19,41 @@
 #include <main.h>
 #include <settings.h>
 #include <user_interface/menuSystem.h>
+#include <user_interface/uiUtilities.h>
 #include <user_interface/uiLocalisation.h>
 
-static void updateScreen(void);
+static void updateScreen(bool isFirstRun);
 static void handleEvent(uiEvent_t *ev);
 
-int menuZoneList(uiEvent_t *ev, bool isFirstRun)
+static menuStatus_t menuZoneExitCode = MENU_STATUS_SUCCESS;
+
+menuStatus_t menuZoneList(uiEvent_t *ev, bool isFirstRun)
 {
 	if (isFirstRun)
 	{
 		gMenusEndIndex = codeplugZonesGetCount();
 		gMenusCurrentItemIndex = nonVolatileSettings.currentZone;
-		updateScreen();
+
+		voicePromptsInit();
+		voicePromptsAppendLanguageString(&currentLanguage->zone);
+		voicePromptsAppendPrompt(PROMPT_SILENCE);
+
+		updateScreen(true);
+		return (MENU_STATUS_LIST_TYPE | MENU_STATUS_SUCCESS);
 	}
 	else
 	{
+		menuZoneExitCode = MENU_STATUS_SUCCESS;
+
 		if (ev->hasEvent)
+		{
 			handleEvent(ev);
+		}
 	}
-	return 0;
+	return menuZoneExitCode;
 }
 
-static void updateScreen(void)
+static void updateScreen(bool isFirstRun)
 {
 	char nameBuf[17];
 	int mNum;
@@ -61,7 +74,26 @@ static void updateScreen(void)
 		codeplugZoneGetDataForNumber(mNum, &zoneBuf);
 		codeplugUtilConvertBufToString(zoneBuf.name, nameBuf, 16);// need to convert to zero terminated string
 
-		menuDisplayEntry(i, mNum, (char* )nameBuf);
+		menuDisplayEntry(i, mNum, (char *)nameBuf);
+
+		if (i == 0)
+		{
+			if (!isFirstRun)
+			{
+				voicePromptsInit();
+			}
+
+			if (strcmp(nameBuf,currentLanguage->all_channels) == 0)
+			{
+				voicePromptsAppendLanguageString(&currentLanguage->all_channels);
+			}
+			else
+			{
+				voicePromptsAppendString(nameBuf);
+			}
+
+			voicePromptsPlay();
+		}
 	}
 
 	ucRender();
@@ -72,29 +104,41 @@ static void handleEvent(uiEvent_t *ev)
 {
 	displayLightTrigger();
 
-	if (KEYCHECK_PRESS(ev->keys,KEY_DOWN))
+	if (ev->events & BUTTON_EVENT)
 	{
-		MENU_INC(gMenusCurrentItemIndex, gMenusEndIndex);
-		updateScreen();
+		if (repeatVoicePromptOnSK1(ev))
+		{
+			return;
+		}
 	}
-	else if (KEYCHECK_PRESS(ev->keys,KEY_UP))
+
+	if (KEYCHECK_PRESS(ev->keys, KEY_DOWN))
 	{
-		MENU_DEC(gMenusCurrentItemIndex, gMenusEndIndex);
-		updateScreen();
+		menuSystemMenuIncrement(&gMenusCurrentItemIndex, gMenusEndIndex);
+		updateScreen(false);
+		menuZoneExitCode |= MENU_STATUS_LIST_TYPE;
 	}
-	else if (KEYCHECK_SHORTUP(ev->keys,KEY_GREEN))
+	else if (KEYCHECK_PRESS(ev->keys, KEY_UP))
 	{
-		nonVolatileSettings.overrideTG = 0; // remove any TG override
-		nonVolatileSettings.currentZone = gMenusCurrentItemIndex;
-		nonVolatileSettings.currentChannelIndexInZone = 0;// Since we are switching zones the channel index should be reset
-		nonVolatileSettings.currentIndexInTRxGroupList[SETTINGS_CHANNEL_MODE]=0;// Since we are switching zones the TRx Group index should be reset
-		channelScreenChannelData.rxFreq=0x00; // Flag to the Channel screen that the channel data is now invalid and needs to be reloaded
+		menuSystemMenuDecrement(&gMenusCurrentItemIndex, gMenusEndIndex);
+		updateScreen(false);
+		menuZoneExitCode |= MENU_STATUS_LIST_TYPE;
+	}
+	else if (KEYCHECK_SHORTUP(ev->keys, KEY_GREEN))
+	{
+		settingsSet(nonVolatileSettings.overrideTG, 0); // remove any TG override
+		settingsSet(nonVolatileSettings.currentZone, gMenusCurrentItemIndex);
+		settingsSet(nonVolatileSettings.currentChannelIndexInZone , 0);// Since we are switching zones the channel index should be reset
+		settingsSet(nonVolatileSettings.currentIndexInTRxGroupList[SETTINGS_CHANNEL_MODE], 0);// Since we are switching zones the TRx Group index should be reset
+		channelScreenChannelData.rxFreq = 0x00; // Flag to the Channel screen that the channel data is now invalid and needs to be reloaded
+
+		settingsSaveIfNeeded(true);
 		menuSystemPopAllAndDisplaySpecificRootMenu(UI_CHANNEL_MODE, true);
-		SETTINGS_PLATFORM_SPECIFIC_SAVE_SETTINGS(false);// For Baofeng RD-5R
+		menuDisplayQSODataState = QSO_DISPLAY_DEFAULT_SCREEN; // Force screen redraw
 
 		return;
 	}
-	else if (KEYCHECK_SHORTUP(ev->keys,KEY_RED))
+	else if (KEYCHECK_SHORTUP(ev->keys, KEY_RED))
 	{
 		menuSystemPopPreviousMenu();
 		return;

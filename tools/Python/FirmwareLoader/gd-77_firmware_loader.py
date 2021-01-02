@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 ################################################################################################################################################
 #
@@ -18,11 +18,7 @@
 # On Linux, depending of you distro, you need to install a special udev rule to automatically unbind the USB HID device to usbhid driver.
 #
 #
-# You need to install future if you're running python2: 
-#    debian like: sudo apt-get install python-future
-#    or: pip install future
-#
-# You also need python-usb or python3-usb, enum34 and urllib3
+# You also need python3-usb, enum34 and urllib3
 #
 ################################################################################################################################################
 
@@ -42,7 +38,6 @@
 #
 ###############################################################
 
-from __future__ import print_function
 import usb
 import getopt, sys
 import ntpath
@@ -57,7 +52,7 @@ class SGLFormatOutput(enum.Enum):
     GD_77 = 0
     GD_77S = 1
     DM_1801 = 2
-    DM_5R = 3
+    RD_5R = 3
     UNKNOWN = 4
 
     def __int__(self):
@@ -66,7 +61,7 @@ class SGLFormatOutput(enum.Enum):
 
 # Globals
 responseOK = [0x41]
-outputModes = ["GD-77", "GD-77S", "DM-1801", "DM-5R", "Unknown"]
+outputModes = ["GD-77", "GD-77S", "DM-1801", "RD-5R", "Unknown"]
 outputFormat = SGLFormatOutput.GD_77
 downloadedFW = ""
 
@@ -97,11 +92,13 @@ def strdumpArray(buf):
         cbuf = cbuf + chr(b)
     return cbuf
 
-def downloadFirmware():
-    url = "https://github.com/rogerclarkmelbourne/OpenGD77/releases/latest"
+def downloadFirmware(downloadStable):
+    url = "https://github.com/rogerclarkmelbourne/OpenGD77/releases"
     urlBase = "http://github.com"
     httpPool = urllib3.PoolManager()
     pattern = ""
+    fwVersion = "UNKNOWN"
+    fwVersionPatternFormat = r'/{}([0-9\.]+)/'
     urlFW = ""
     webContent = ""
         
@@ -117,27 +114,34 @@ def downloadFirmware():
     webContent = str(response.data)
     
     if (outputFormat == SGLFormatOutput.GD_77):
-        pattern = r'/rogerclarkmelbourne/OpenGD77/releases/download/R([0-9\.]+)/OpenGD77\.sgl'
+        patternFormat = r'/rogerclarkmelbourne/OpenGD77/releases/download/{}([0-9\.]+)/OpenGD77\.sgl'
     elif (outputFormat == SGLFormatOutput.GD_77S):
-        pattern = '/rogerclarkmelbourne/OpenGD77/releases/download/R([0-9\.]+)/OpenGD77S\.sgl'
+        patternFormat = r'/rogerclarkmelbourne/OpenGD77/releases/download/{}([0-9\.]+)/OpenGD77S\.sgl'
     elif (outputFormat == SGLFormatOutput.DM_1801):
-        pattern = '/rogerclarkmelbourne/OpenGD77/releases/download/R([0-9\.]+)/OpenDM1801\.sgl'
-    elif (outputFormat == SGLFormatOutput.DM_5R):
-        pattern = '/rogerclarkmelbourne/OpenGD77/releases/download/R([0-9\.]+)/OpenDM5R\.sgl'
-    
+        patternFormat = r'/rogerclarkmelbourne/OpenGD77/releases/download/{}([0-9\.]+)/OpenDM1801\.sgl'
+    elif (outputFormat == SGLFormatOutput.RD_5R):
+        patternFormat = r'/rogerclarkmelbourne/OpenGD77/releases/download/{}([0-9\.]+)/OpenDM5R\.sgl'
+
+    pattern = patternFormat.format("R" if downloadStable == True else "D")
+    fwVersionPattern = fwVersionPatternFormat.format("R" if downloadStable == True else "D") 
     contentArray = webContent.split("\n")    
     
     for l in contentArray:
         m = re.search(pattern, l)
         if (m != None):
             urlFW = urlBase + m.group(0)
+            
+            m = re.search(fwVersionPattern, urlFW)
+            if (m != None):
+                fwVersion = m.group(0).strip('/')
+            
             break
     
     if (len(urlFW)):
         global downloadedFW
         downloadedFW = os.path.join(tempfile.gettempdir(), next(tempfile._get_candidate_names()) + '.sgl')
         
-        print(" - " + "Downloading the firmware, please wait");
+        print(" - " + "Downloading the firmware version {}, please wait".format(fwVersion));
         
         try:
             response = httpPool.request('GET', urlFW, preload_content=False)
@@ -240,10 +244,7 @@ def createChecksumData(buf, startAddress, endAddress):
     cs = 0
     
     for i in range(startAddress, endAddress):
-        if (sys.version_info > (3, 0)):
-            cs = cs + buf[i]
-        else:
-            cs = cs + ord(buf[i]) #the file data seems to be a string, hence the ord() function is needed to convert it to an integer
+        cs = cs + buf[i]
      
     checkSumData[4] = (cs % 256) & 0xff
     checkSumData[5] = ((cs >> 8) % 256) & 0xff
@@ -253,12 +254,13 @@ def createChecksumData(buf, startAddress, endAddress):
 
 
 def updateBlockAddressAndLength(buf, address, length):
-	buf[5] = ((length) % 256) & 0xff
-	buf[4] = ((length >> 8) % 256) & 0xff
-	buf[3] = ((address) % 256) & 0xff
-	buf[2] = ((address >> 8) % 256) & 0xff
-	buf[1] = ((address >> 16) % 256) & 0xff
-	buf[0] = ((address >> 24) % 256) & 0xff
+    buf[5] = ((length) % 256) & 0xff
+    buf[4] = ((length >> 8) % 256) & 0xff
+    buf[3] = ((address) % 256) & 0xff
+    buf[2] = ((address >> 8) % 256) & 0xff
+    buf[1] = ((address >> 16) % 256) & 0xff
+    buf[0] = ((address >> 24) % 256) & 0xff
+    return buf
 
 
 #####################################################
@@ -278,15 +280,12 @@ def sendFileData(fileBuf, dev):
         if ((address % BLOCK_LENGTH) == 0):
             checksumStartAddress = address
             
-        updateBlockAddressAndLength(dataHeader, address, DATA_TRANSFER_SIZE)
+        dataHeader = updateBlockAddressAndLength(dataHeader, address, DATA_TRANSFER_SIZE)
         
         if ((address + DATA_TRANSFER_SIZE) < fileLength):
             
             for i in range(DATA_TRANSFER_SIZE):
-                if (sys.version_info > (3, 0)):
-                    dataHeader[6 + i] = fileBuf[address + i]
-                else:
-                    dataHeader[6 + i] = ord(fileBuf[address + i])  ## + [ord(i) for i in input[address:(address + DATA_TRANSFER_SIZE)]]
+                dataHeader[6 + i] = fileBuf[address + i]
  
             if  (sendAndCheckResponse(dev, dataHeader, responseOK) == False):
                 print("Error sending data")
@@ -310,13 +309,10 @@ def sendFileData(fileBuf, dev):
             
             DATA_TRANSFER_SIZE = fileLength - address
 
-            updateBlockAddressAndLength(dataHeader, address, DATA_TRANSFER_SIZE)
+            dataHeader = updateBlockAddressAndLength(dataHeader, address, DATA_TRANSFER_SIZE)
             
             for i in range(DATA_TRANSFER_SIZE):
-                if (sys.version_info > (3, 0)):
-                    dataHeader[6 + i] = fileBuf[address + i]
-                else:
-                    dataHeader[6 + i] = ord(fileBuf[address + i])  ## + [ord(i) for i in input[address:(address + DATA_TRANSFER_SIZE)]]
+                dataHeader[6 + i] = fileBuf[address + i]
             
             if (sendAndCheckResponse(dev, dataHeader, responseOK) == False):
                 print("Error sending data")
@@ -345,7 +341,7 @@ def probeModel(dev):
     #commandEND     = [ 0x45, 0x4E, 0x44, 0xFF ] # END.
     commandID      = [ command0, command1 ]
     models         = [[ 'DV01', SGLFormatOutput.GD_77 ], [ 'DV02', SGLFormatOutput.GD_77S ], [ 'DV03', SGLFormatOutput.DM_1801 ]]
-    # DM-5R also have "DV02" id
+    # RD-5R also have "DV02" id
 
     commandNumber = 0
     while commandNumber < len(commandID):
@@ -357,7 +353,7 @@ def probeModel(dev):
     ##dummy = sendAndGetResponse(dev, command0[0])
 
     for x in models:
-        if (x[0] == str((resp[:4].tobytes().decode("ascii")) if (sys.version_info > (3, 0)) else (resp[:4].tostring().decode("ascii")))):
+        if (x[0] == str(resp[:4].tobytes().decode("ascii"))):
             return x[1]
 
     return SGLFormatOutput.UNKNOWN
@@ -376,14 +372,14 @@ def sendInitialCommands(dev, encodeKey):
         command4            =[[0x53, 0x47, 0x2d, 0x4d, 0x44, 0x2d, 0x37, 0x36, 0x30, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff],responseOK] #SG-MD-760
         command5            =[[0x4d, 0x44, 0x2d, 0x37, 0x36, 0x30, 0xff, 0xff],responseOK] #MD-760..
     elif (outputFormat == SGLFormatOutput.GD_77S):
-        command2            =[[0x44, 0x56, 0x30, 0x32, 0x47, 0x70, 0x6d, 0x4a],[0x44, 0x56, 0x30, 0x32]] #.... DV02Gpmj (thanks Wireshark)
+        command2            =[[0x44, 0x56, 0x30, 0x32, 0x6D, 0x40, 0x7D, 0x63],[0x44, 0x56, 0x30, 0x32]] #.... DV02Gpmj (thanks Wireshark)
         command4            =[[0x53, 0x47, 0x2d, 0x4d, 0x44, 0x2d, 0x37, 0x33, 0x30, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff],responseOK] #SG-MD-730
         command5            =[[0x4d, 0x44, 0x2d, 0x37, 0x33, 0x30, 0xff, 0xff],responseOK] #MD-730..
     elif (outputFormat == SGLFormatOutput.DM_1801):
         command2            =[[0x44, 0x56, 0x30, 0x33, 0x74, 0x21, 0x44, 0x39],[0x44, 0x56, 0x30, 0x33]] #.... last 4 bytes of the command are the offset encoded as letters a - p (hard coded fr
         command4            =[[0x42, 0x46, 0x2d, 0x44, 0x4d, 0x52, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff],responseOK] #BF-DMR
         command5            =[[0x31, 0x38, 0x30, 0x31, 0xff, 0xff, 0xff, 0xff],responseOK] # MD-1801
-    elif (outputFormat == SGLFormatOutput.DM_5R):
+    elif (outputFormat == SGLFormatOutput.RD_5R):
         command2            =[[0x44, 0x56, 0x30, 0x32, 0x53, 0x36, 0x37, 0x62],[0x44, 0x56, 0x30, 0x32]] #.... last 4 bytes of the command are the offset encoded as letters a - p (hard coded fr
         command4            =[[0x42, 0x46, 0x2D, 0x35, 0x52, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff],responseOK] #BF-5R
         command5            =[[0x42, 0x46, 0x2D, 0x35, 0x52, 0xff, 0xff, 0xff],responseOK] # BF-5R
@@ -391,14 +387,14 @@ def sendInitialCommands(dev, encodeKey):
     command6            =[[0x56, 0x31, 0x2e, 0x30, 0x30, 0x2e, 0x30, 0x31],responseOK] #V1.00.01
     commandErase        =[[0x46, 0x2d, 0x45, 0x52, 0x41, 0x53, 0x45, 0xff],responseOK] #F-ERASE
     commandPostErase    =[commandLetterA,responseOK] 
-    commandProgram      =[[0x50, 0x52, 0x4f, 0x47, 0x52, 0x41, 0x4d, 0xf],responseOK] #PROGRAM    
+    commandProgram      =[[0x50, 0x52, 0x4f, 0x47, 0x52, 0x41, 0x4d, 0xf],responseOK] #PROGRAM
     commands            =[command0,command1,command2,command3,command4,command5,command6,commandErase,commandPostErase,commandProgram]
     commandNames        =["Sending Download command", "Sending ACK", "Sending encryption key", "Sending F-PROG command", "Sending radio modem number", "Sending radio modem number 2", "Sending version", "Sending erase command", "Send post erase command", "Sending Program command"]
     commandNumber = 0
     
     # Buffer.BlockCopy(encodeKey, 0, command2[0], 4, 4);
-    command2 = encodeKey + command2
-
+    command2[0] = command2[0][0:4] + encodeKey
+    
     # Send the commands which the GD-77 expects before the start of the data
     while commandNumber < len(commands):
         print(" - " + commandNames[commandNumber])
@@ -413,26 +409,20 @@ def sendInitialCommands(dev, encodeKey):
 ###########################################################################################################################################
 #
 ###########################################################################################################################################
-def checkForSGLAndReturnEncryptedData(fileBuf, encodeKey, headerModel):
+def checkForSGLAndReturnEncryptedData(fileBuf):
     header_tag = list("SGL!")
+    headerModel = []
     
-    if (sys.version_info > (3, 0)):
-        buf_in_4 = list("".join(map(chr, fileBuf[0:4])))
-        headerModel.append(fileBuf[11])
-    else:
-        buf_in_4 = list(fileBuf[0:4])
-        headerModel.append(ord(fileBuf[11]))
+    buf_in_4 = list("".join(map(chr, fileBuf[0:4])))
+    headerModel.append(fileBuf[11])
 
     if buf_in_4 == header_tag:
         # read and decode offset and xor tag
         buf_in_4 = list(fileBuf[0x000C : 0x000C + 4])
         
         for i in range(0, 4):
-                if (sys.version_info > (3, 0)):
-                    buf_in_4[i] = buf_in_4[i] ^ ord(header_tag[i])
-                else:
-                    buf_in_4[i] = ord(buf_in_4[i]) ^ ord(header_tag[i])
-            
+            buf_in_4[i] = buf_in_4[i] ^ ord(header_tag[i])
+        
         offset = buf_in_4[0] + 256 * buf_in_4[1]
         xor_data = [ buf_in_4[2], buf_in_4[3] ]
         
@@ -441,10 +431,7 @@ def checkForSGLAndReturnEncryptedData(fileBuf, encodeKey, headerModel):
     
         xor_idx = 0;
         for i in range(0, 512):
-            if (sys.version_info > (3, 0)):
-                buf_in_512[i] = buf_in_512[i] ^ xor_data[xor_idx]
-            else:
-                buf_in_512[i] = ord(buf_in_512[i]) ^ xor_data[xor_idx]
+            buf_in_512[i] = buf_in_512[i] ^ xor_data[xor_idx]
             
             xor_idx += 1
             if xor_idx == 2:
@@ -464,10 +451,10 @@ def checkForSGLAndReturnEncryptedData(fileBuf, encodeKey, headerModel):
         retBuf = [0x00] * length;
         retBuf = fileBuf[len(fileBuf) - length : len(fileBuf) - length + len(retBuf) ]
 
-        return retBuf
+        return retBuf, encodeKey, headerModel
     
     print("ERROR: SGL! header is missing.")
-    return None
+    return None, None, None
 
 ###########################################################################################################################################
 #
@@ -480,6 +467,8 @@ def usage():
     print("    -f, --firmware=<filename.sgl>  : Flash <filename.sgl> instead of default file \"firmware.sgl\"")
     print("    -m, --model=<type>             : Select transceiver model. Models are: {}".format(", ".join(str(x) for x in outputModes[:-1])) + ".")
     print("    -d, --download                 : Download firmware from the project website")
+    print("    -S, --stable                   : Select the stable version while downloading from the project page")
+    print("    -U, --unstable                 : Select the development version while downloading from the project page")
     print("")
 
 #####################################################
@@ -488,12 +477,13 @@ def usage():
 def main():
     global outputFormat
     sglFile = "firmware.sgl"
+    downloadStable = True
     doDownload = False
     doForce = False
 
     # Command line argument parsing
     try:                                
-        opts, args = getopt.getopt(sys.argv[1:], "hf:m:dF", ["help", "firmware=", "model=", "download", "force"])
+        opts, args = getopt.getopt(sys.argv[1:], "hf:m:dSUF", ["help", "firmware=", "model=", "download", "stable", "unstable", "force"])
     except getopt.GetoptError as err:
         print(str(err))
         usage()
@@ -520,6 +510,10 @@ def main():
                 
         elif opt in ["-d", "--download"]:
             doDownload = True
+        elif opt in ["-S", "--stable"]:
+            downloadStable = True
+        elif opt in ["-U", "--unstable"]:
+            downloadStable = False
         elif opt in ["-F", "--force"]:
             doForce = True
         else:
@@ -547,7 +541,7 @@ def main():
         
         # Try to download the firmware
         if (doDownload == True):
-            if (downloadFirmware() == True):
+            if (downloadFirmware(downloadStable) == True):
                 sglFile = downloadedFW
             else:
                 print("Firmware download failed")
@@ -569,18 +563,17 @@ def main():
         if (outputFormat == SGLFormatOutput.GD_77):
             encodeKey = [ (0x61 + 0x00), (0x61 + 0x0C), (0x61 + 0x0D), (0x61 + 0x01) ]
         elif (outputFormat == SGLFormatOutput.GD_77S):
-            encodeKey = [ (0x47), (0x70), (0x6d), (0x4a) ]
+            encodeKey = [ (0x6D), (0x40), (0x7D), (0x63) ] ## Original header (smaller filelength): was (0x47), (0x70), (0x6d), (0x4a)
         elif (outputFormat == SGLFormatOutput.DM_1801):
             encodeKey = [ (0x74), (0x21), (0x44), (0x39) ]
-        elif (outputFormat == SGLFormatOutput.DM_5R):
+        elif (outputFormat == SGLFormatOutput.RD_5R):
             encodeKey = [ (0x53), (0x36), (0x37), (0x62) ]
 
         if (file_extension == ".sgl"):
-            firmwareModelTag = { SGLFormatOutput.GD_77: 0x1B , SGLFormatOutput.GD_77S: 0x70, SGLFormatOutput.DM_1801: 0x4F, SGLFormatOutput.DM_5R: 0x5C}
-            headerModel = []
+            firmwareModelTag = { SGLFormatOutput.GD_77: 0x1B , SGLFormatOutput.GD_77S: 0x70, SGLFormatOutput.DM_1801: 0x4F, SGLFormatOutput.RD_5R: 0x5C}
             
             ## Could be a SGL file !
-            fileBuf = checkForSGLAndReturnEncryptedData(fileBuf, encodeKey, headerModel)
+            fileBuf, encodeKey, headerModel = checkForSGLAndReturnEncryptedData(fileBuf)
 
             if (fileBuf == None):
                 print("Error. Missing SGL in .sgl file header")
@@ -623,3 +616,4 @@ def main():
 
 ## Run the program
 main()
+sys.exit(0)

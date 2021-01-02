@@ -27,11 +27,11 @@ static void handleEvent(uiEvent_t *ev);
 int uiPrivateCallState = NOT_IN_CALL;
 int uiPrivateCallLastID;
 
-int menuPrivateCall(uiEvent_t *ev, bool isFirstRun)
+menuStatus_t menuPrivateCall(uiEvent_t *ev, bool isFirstRun)
 {
 	if (isFirstRun)
 	{
-		set_melody(melody_private_call);
+		soundSetMelody(MELODY_PRIVATE_CALL);
 		uiPrivateCallState = PRIVATE_CALL_ACCEPT;
 		menuUtilityReceivedPcId = LinkHead->id;
 
@@ -45,7 +45,7 @@ int menuPrivateCall(uiEvent_t *ev, bool isFirstRun)
 			handleEvent(ev);
 		}
 	}
-	return 0;
+	return MENU_STATUS_SUCCESS;
 }
 
 static void updateScreen(void)
@@ -63,6 +63,7 @@ static void updateScreen(void)
 	}
 	ucPrintCentered(32, buffer, FONT_SIZE_3);
 
+	ucPrintCentered(0, currentLanguage->private_call, FONT_SIZE_3);
 	ucPrintCentered(16, currentLanguage->accept_call, FONT_SIZE_3);
 	ucDrawChoice(CHOICE_YESNO, false);
 	ucRender();
@@ -84,7 +85,7 @@ static void handleEvent(uiEvent_t *ev)
 		}
 		else if (KEYCHECK_SHORTUP(ev->keys, KEY_GREEN))
 		{
-			menuAcceptPrivateCall(menuUtilityReceivedPcId);
+			acceptPrivateCall(menuUtilityReceivedPcId);
 			menuSystemPopPreviousMenu();
 			return;
 		}
@@ -99,14 +100,4 @@ void menuClearPrivateCall(void )
 	menuUtilityReceivedPcId = 0;
 }
 
-void menuAcceptPrivateCall(int id )
-{
-	uiPrivateCallState = PRIVATE_CALL;
-	uiPrivateCallLastID = (id & 0xffffff);
-	settingsPrivateCallMuteMode=false;
-	menuUtilityReceivedPcId = 0;
-
-	setOverrideTGorPC(uiPrivateCallLastID, true);
-
-}
 

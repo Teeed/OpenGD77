@@ -17,6 +17,7 @@
  */
 #include <user_interface/menuSystem.h>
 #include <user_interface/uiLocalisation.h>
+#include <user_interface/uiUtilities.h>
 
 static void updateScreen(void);
 static void handleEvent(uiEvent_t *ev);
@@ -30,20 +31,22 @@ static const int NUM_LINES_PER_SCREEN = 6;
 #endif
 const int NUM_CREDITS = 7;
 static const char *creditTexts[] = {"Roger VK3KYY","Daniel F1RMB","Dzmitry EW1ADG","Colin G4EML","Alex DL4LEX","Kai DG4KLU","Jason VK7ZJA"};
-static int currentDisplayIndex=0;
+static int currentDisplayIndex = 0;
 
-int menuCredits(uiEvent_t *ev, bool isFirstRun)
+menuStatus_t menuCredits(uiEvent_t *ev, bool isFirstRun)
 {
 	if (isFirstRun)
 	{
-		gMenusCurrentItemIndex=5000;
+		gMenusCurrentItemIndex = 5000;
 
 		updateScreen();
 	}
 	else
 	{
 		if (ev->hasEvent)
+		{
 			handleEvent(ev);
+		}
 /*
  * Uncomment to enable auto scrolling
 		if ((gMenusCurrentItemIndex--)==0)
@@ -53,7 +56,7 @@ int menuCredits(uiEvent_t *ev, bool isFirstRun)
 		}
 */
 	}
-	return 0;
+	return MENU_STATUS_SUCCESS;
 }
 
 static void updateScreen(void)
@@ -61,11 +64,11 @@ static void updateScreen(void)
 	ucClearBuf();
 	menuDisplayTitle(currentLanguage->credits);
 
-	for(int i=0;i<NUM_LINES_PER_SCREEN;i++)
+	for(int i = 0; i < NUM_LINES_PER_SCREEN; i++)
 	{
-		if ((i+currentDisplayIndex) < NUM_CREDITS)
+		if ((i + currentDisplayIndex) < NUM_CREDITS)
 		{
-			ucPrintCentered(i*8 + 16,(char *)creditTexts[i+currentDisplayIndex], FONT_SIZE_1);
+			ucPrintCentered(i * 8 + 16, (char *)creditTexts[i+currentDisplayIndex], FONT_SIZE_1);
 		}
 	}
 	ucRender();
@@ -74,7 +77,7 @@ static void updateScreen(void)
 
 static void scrollDownOneLine(void)
 {
-	if (currentDisplayIndex < (NUM_CREDITS - NUM_LINES_PER_SCREEN) )
+	if (currentDisplayIndex < (NUM_CREDITS - NUM_LINES_PER_SCREEN))
 	{
 		currentDisplayIndex++;
 	}
@@ -83,27 +86,34 @@ static void scrollDownOneLine(void)
 
 static void handleEvent(uiEvent_t *ev)
 {
+	if (ev->events & BUTTON_EVENT)
+	{
+		if (repeatVoicePromptOnSK1(ev))
+		{
+			return;
+		}
+	}
 
-	if (KEYCHECK_SHORTUP(ev->keys,KEY_RED))
+	if (KEYCHECK_SHORTUP(ev->keys, KEY_RED))
 	{
 		menuSystemPopPreviousMenu();
 		return;
 	}
-	else if (KEYCHECK_PRESS(ev->keys,KEY_DOWN))
+	else if (KEYCHECK_PRESS(ev->keys, KEY_DOWN))
 	{
 		scrollDownOneLine();
 	}
-	else if (KEYCHECK_PRESS(ev->keys,KEY_UP))
+	else if (KEYCHECK_PRESS(ev->keys, KEY_UP))
 	{
-		if (currentDisplayIndex>0)
+		if (currentDisplayIndex > 0)
 		{
 			currentDisplayIndex--;
 		}
+
 		updateScreen();
 	}
-	else if (KEYCHECK_SHORTUP(ev->keys,KEY_GREEN))
+	else if (KEYCHECK_SHORTUP(ev->keys, KEY_GREEN))
 	{
 		menuSystemPopAllAndDisplayRootMenu();
-		return;
 	}
 }
