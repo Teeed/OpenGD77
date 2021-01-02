@@ -1,10 +1,12 @@
 # OpenGD77
+[![Build Status](https://drone.teeed.eu/api/badges/Teeed/OpenGD77/status.svg)](https://drone.teeed.eu/Teeed/OpenGD77)
+
+
 Firmware for DMR transceivers using the NXP MK22 MCU, AT1846S RF chip and HR-C6000 DMR chipset. Including the Radioddiy GD-77, Baofeng DM-1801 and Baofeng RD-5R.
 
 
 Note.
 The AMBE codec is not open source because of potential copyright problems, and instead uses binary sections from original manufacturer’s firmware.
-[![Build Status](https://drone.teeed.eu/api/badges/Teeed/OpenGD77/status.svg)](https://drone.teeed.eu/Teeed/OpenGD77)
 
 Open source firmware for the Radioddity GD-77 dual band DMR / FM handheld transceiever, for Amateur Radio use.
 
